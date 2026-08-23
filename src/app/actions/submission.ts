@@ -26,12 +26,10 @@ const langSchema = z.enum(['ml', 'en'])
 const sendMethodSchema = z.enum(['gmail_web', 'mailto', 'copy', 'server', 'print'])
 const letterModeSchema = z.enum(['selected', 'all'])
 
-const letterModeSchema = z.enum(['selected', 'all'])
-
 const letterInputSchema = z.object({
   campaignSlug: z.string().min(1),
   fullName: z.string().trim().optional().default(''),
-  email: optionalEmail.optional().default(''),
+  email: z.string().trim().optional().default(''),
   phone: z.string().trim().optional().default(''),
   address: z.string().trim().optional().default(''),
   panchayat: z.string().trim().optional().default(''),

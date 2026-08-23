@@ -37,15 +37,15 @@ test('identity block omits empty lines', () => {
 
 test('privacy letter contains campaign and concern, not personal location', () => {
   const body = privacyLetter({
-    campaign: fixtureCampaign,
-    clauses: [fixtureClauses[0]],
+    campaign: demoCampaign,
+    clauses: [demoClauses[0]],
     extraConcerns: ['Keep the river accessible'],
     lang: 'en',
   })
   assert.match(body, /Dear Sir\/Madam/)
   assert.match(body, /A concerned citizen/)
   assert.match(body, /Keep the river accessible/)
-  assert.match(body, new RegExp(fixtureClauses[0].title_en))
+  assert.match(body, new RegExp(demoClauses[0].title_en))
   assert.doesNotMatch(body, /Joseph/)
   assert.doesNotMatch(body, /685531/)
   assert.doesNotMatch(body, /Adimali/)
@@ -55,10 +55,10 @@ test('privacy letter contains campaign and concern, not personal location', () =
 test('compose with privacyMode drops name, PIN, and office from the email', () => {
   const result = composeEmail({
     campaign: {
-      ...fixtureCampaign,
+      ...demoCampaign,
       body_template_en: '{{intro}}\n\n{{concerns}}\n\n{{identity_block}}',
     },
-    clauses: [fixtureClauses[0]],
+    clauses: [demoClauses[0]],
     details: {
       fullName: 'Joseph Mathew',
       addressLine: 'Hill Road',
@@ -87,10 +87,10 @@ test('compose with privacyMode drops name, PIN, and office from the email', () =
 test('identified compose includes resolved location via identity_block', () => {
   const result = composeEmail({
     campaign: {
-      ...fixtureCampaign,
+      ...demoCampaign,
       body_template_en: '{{concerns}}\n\n{{identity_block}}',
     },
-    clauses: [fixtureClauses[0]],
+    clauses: [demoClauses[0]],
     details: {
       fullName: 'Joseph Mathew',
       addressLine: '',
