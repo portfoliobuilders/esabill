@@ -14,6 +14,7 @@ const identityDetails = {
   district: 'Idukki',
   state: 'Kerala',
   postalRegion: 'Kochi',
+  taluk: 'Devikulam',
 }
 
 test('identity block omits empty lines', () => {
@@ -27,11 +28,11 @@ test('identity block omits empty lines', () => {
       'District: Idukki',
       'State: Kerala',
       'Postal Region: Kochi',
+      'Taluk: Devikulam',
     ].join('\n'),
   )
   assert.doesNotMatch(block, /Phone/)
   assert.doesNotMatch(block, /Address/)
-  assert.doesNotMatch(block, /Taluk/)
 })
 
 test('privacy letter contains campaign and concern, not personal location', () => {
@@ -101,6 +102,7 @@ test('identified compose includes resolved location via identity_block', () => {
       postOffice: 'Adimali',
       state: 'Kerala',
       postalRegion: 'Kochi',
+      taluk: 'Devikulam',
     },
     lang: 'en',
   })
@@ -109,5 +111,7 @@ test('identified compose includes resolved location via identity_block', () => {
   assert.match(result.body, /Post Office: Adimali/)
   assert.match(result.body, /District: Idukki/)
   assert.match(result.body, /State: Kerala/)
+  assert.match(result.body, /Postal Region: Kochi/)
+  assert.match(result.body, /Taluk: Devikulam/)
   assert.doesNotMatch(result.body, /Phone Number:/)
 })

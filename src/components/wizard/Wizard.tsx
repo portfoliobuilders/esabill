@@ -23,6 +23,7 @@ import { cx } from '@/lib/cx'
 import type { DistrictOption } from '@/lib/kerala-districts'
 import {
   createDetailsSchema,
+  emptyDetails,
   fieldErrorsFromZod,
   type DetailsFields,
   type FieldErrors,
@@ -67,18 +68,6 @@ type WizardAction =
   | { type: 'clause_error' }
   | { type: 'goto'; step: Step }
   | { type: 'back' }
-
-const emptyDetails: DetailsFields = {
-  fullName: '',
-  addressLine: '',
-  panchayat: '',
-  village: '',
-  district: '',
-  pincode: '',
-  phone: '',
-  email: '',
-  customText: '',
-}
 
 function withCustomConcerns(state: WizardState, customConcerns: string[]): WizardState {
   const detailsErrors = { ...state.detailsErrors }
@@ -178,7 +167,7 @@ export function Wizard({
     step: 1,
     selectedClauseIds: [],
     customConcerns: [''],
-    details: emptyDetails,
+    details: emptyDetails(),
     routing: emptyRouting,
     submissionId: null,
     detailsErrors: {},
@@ -233,6 +222,10 @@ export function Wizard({
         clauseCodes: selectedClauses.map((clause) => clause.code),
         constituencyId: state.routing.constituencyId,
         ccRepIds: state.routing.ccRepresentativeIds,
+        postOffice: details.postOffice,
+        state: details.state,
+        postalRegion: details.postalRegion,
+        taluk: details.taluk,
       })
       if (prepared.ok) {
         dispatch({
@@ -262,6 +255,10 @@ export function Wizard({
         email: details.email,
         customText: details.customText,
         extraConcerns: config.allowCustomConcern ? extraConcerns : [],
+        postOffice: details.postOffice,
+        state: details.state,
+        postalRegion: details.postalRegion,
+        taluk: details.taluk,
       },
       lang,
     })

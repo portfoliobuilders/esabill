@@ -1,13 +1,11 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState, type HTMLAttributes } from 'react'
+import { useEffect, useMemo, useReducer, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
-import { markHandoff, prepareDemoLetter } from '@/app/actions/submission'
+import { prepareDemoLetter, markHandoff } from '@/app/actions/submission'
+import { CampaignProgress } from '@/components/campaign/CampaignProgress'
 import { CampaignSources } from '@/components/campaign/CampaignSources'
-import { ReadAloudControls } from '@/components/campaign/ReadAloudControls'
-import { StatusRegion } from '@/components/campaign/StatusRegion'
-import { VoiceInputButton } from '@/components/campaign/VoiceInputButton'
 import { LanguageToggle } from '@/components/LanguageToggle'
 import { useLang } from '@/components/LanguageProvider'
 import { IconChevronRight, IconCopy, IconEnvelope, IconGmail } from '@/components/ui/icons'
@@ -27,13 +25,10 @@ import { approvedAiBody, concernBody, concernShort, concernTitle } from '@/lib/c
 import {
   applyPredefinedConcernClick,
   campaignConcernConfig,
-  customConcernCopy,
   flattenCustomConcerns,
-  isMultiSelect,
   selectedClausesForLetter,
   validatePredefinedSelection,
 } from '@/lib/concern-selection'
-import { parseFeatureSettings } from '@/lib/campaign-features'
 import { cx } from '@/lib/cx'
 import {
   createDetailsSchema,
@@ -49,7 +44,8 @@ import { t, tReplace, type Lang } from '@/lib/i18n'
 import {
   compactLocationLine,
   isValidPincode,
-  locationFromLookup,
+  withPostalIdentity,
+  postalIdentityFromLookup,
   type PostalLookup,
 } from '@/lib/postal'
 import { btnGhost, btnPrimary, btnSecondary, focusRing, inputClass, labelClass } from '@/lib/ui'
@@ -68,6 +64,22 @@ function statusLabel(lang: Lang, mode: WizardMode | 'inactive' | 'expired') {
   return t(lang, 'statusDraft')
 }
 
+const pinCache = new Map<string, PostalLookup>()
+
+function detailsFromLookup(prev: DetailsFields, lookup: PostalLookup | null, office: string): DetailsFields {
+  const next = withPostalIdentity(prev, postalIdentityFromLookup(lookup, office))
+  if (
+    next.district === prev.district &&
+    next.postOffice === prev.postOffice &&
+    next.state === prev.state &&
+    next.postalRegion === prev.postalRegion &&
+    next.taluk === prev.taluk
+  ) {
+    return prev
+  }
+  return next
+}
+
 export function CampaignFlow({
   campaign,
   clauses,
@@ -77,7 +89,6 @@ export function CampaignFlow({
   view,
   aiConfigured = false,
   sources = [],
-  aiConfigured = false,
 }: {
   campaign: Campaign
   clauses: ObjectionClause[]
@@ -122,8 +133,8 @@ export function CampaignFlow({
     () => (config.allowCustomConcern ? flattenCustomConcerns([customConcern]) : []),
     [config.allowCustomConcern, customConcern],
   )
-  const location = useMemo(
-    () => (privacyOn ? {} : locationFromLookup(lookup, officeName)),
+  const postalIdentity = useMemo(
+    () => (privacyOn ? postalIdentityFromLookup(null) : postalIdentityFromLookup(lookup, officeName)),
     [privacyOn, lookup, officeName],
   )
 
@@ -150,19 +161,14 @@ export function CampaignFlow({
       campaign,
       clauses: clausesForMail,
       details: {
-        ...details,
+        ...withPostalIdentity(details, postalIdentity),
         extraConcerns: extras,
         customText: '',
-        postOffice: location.postOffice,
-        district: location.district || details.district,
-        state: location.state,
-        postalRegion: location.postalRegion,
-        taluk: location.taluk,
         privacyMode: privacyOn,
       },
       lang,
     })
-  }, [campaign, clausesForMail, details, extras, lang, location, privacyOn, selected.length])
+  }, [campaign, clausesForMail, details, extras, lang, postalIdentity, privacyOn, selected.length])
 
   useEffect(() => {
     if (!features.enable_pin_lookup || privacyOn) return
@@ -171,16 +177,16 @@ export function CampaignFlow({
       setLookup(null)
       setLookupState('idle')
       setOfficeName('')
+      setDetails((prev) => detailsFromLookup(prev, null, ''))
       return
     }
     const cached = pinCache.get(pin)
     if (cached) {
+      const office = cached.common.postOffice || ''
       setLookup(cached)
       setLookupState('done')
-      setOfficeName(cached.common.postOffice || '')
-      if (cached.common.district) {
-        setDetails((prev) => (prev.district === cached.common.district ? prev : { ...prev, district: cached.common.district || '' }))
-      }
+      setOfficeName(office)
+      setDetails((prev) => detailsFromLookup(prev, cached, office))
       setStatus(compactLocationLine(cached.common) || t(lang, 'locationStatus'))
       return
     }
@@ -193,12 +199,11 @@ export function CampaignFlow({
       .then((response) => response.json())
       .then((data: PostalLookup) => {
         pinCache.set(pin, data)
+        const office = data.common.postOffice || ''
         setLookup(data)
         setLookupState('done')
-        setOfficeName(data.common.postOffice || '')
-        if (data.common.district) {
-          setDetails((prev) => ({ ...prev, district: data.common.district || prev.district }))
-        }
+        setOfficeName(office)
+        setDetails((prev) => detailsFromLookup(prev, data, office))
         if (data.found) setStatus(compactLocationLine(data.common) || t(lang, 'locationStatus'))
         else setStatus(t(lang, 'pinNotFound'))
       })
@@ -218,31 +223,50 @@ export function CampaignFlow({
     ? Math.max(0, Math.ceil((new Date(campaign.deadline_at).getTime() - Date.now()) / 86_400_000))
     : null
 
-  const showAi =
-    features.enable_ai_mail &&
-    selected.length === 1 &&
-    (aiConfigured || Boolean(selected[0] && approvedAiBody(selected[0], lang)))
-  const showVoice = features.enable_voice_input
-  const showRead = features.enable_mail_read_aloud && Boolean(letter?.body)
+  useEffect(() => {
+    const pin = state.details.pincode.trim()
+    if (!/^[1-9][0-9]{5}$/.test(pin)) return
+    const controller = new AbortController()
+    const timer = window.setTimeout(() => {
+      const params = new URLSearchParams({ pincode: pin })
+      if (state.details.district.trim()) params.set('district', state.details.district.trim())
+      void fetch(`/api/constituency?${params.toString()}`, { signal: controller.signal })
+        .then(async (response) => {
+          if (!response.ok) return
+          const body = (await response.json()) as { candidates?: Array<{ constituency?: { district?: string } }> }
+          const district = body.candidates?.[0]?.constituency?.district
+          if (district && !state.details.district.trim()) {
+            dispatch({ type: 'set_details', details: { district } })
+          }
+        })
+        .catch(() => undefined)
+    }, 400)
+    return () => {
+      window.clearTimeout(timer)
+      controller.abort()
+    }
+  }, [state.details.pincode, state.details.district])
 
-  function patchDetails(next: Partial<DetailsFields>) {
-    setDetails((prev) => ({ ...prev, ...next }))
-    const nextErrors = { ...errors }
-    for (const key of Object.keys(next) as Array<keyof DetailsFields>) delete nextErrors[key]
-    setErrors(nextErrors)
+  function goConcern() {
+    if (!actionable) return
+    dispatch({ type: 'goto', step: 2 })
   }
 
-  function selectConcern(id: string) {
-    const next = applyPredefinedConcernClick({
+  function goDetails() {
+    const check = validatePredefinedSelection({
       mode: config.mode,
-      selectedIds,
-      id,
+      selectedIds: state.selectedIds,
       maxSelections: config.maxSelections,
     })
-    setSelectedIds(next.selectedIds)
-    setConcernError(false)
-    setImproved(null)
-    setAiError('')
+    if (check === 'required') {
+      dispatch({ type: 'concern_error' })
+      return
+    }
+    if (check === 'too_many') {
+      dispatch({ type: 'max_error' })
+      return
+    }
+    dispatch({ type: 'goto', step: 3 })
   }
 
   function selectConcern(id: string) {
@@ -268,30 +292,26 @@ export function CampaignFlow({
       dispatch({ type: 'details_invalid', errors: fieldErrorsFromZod(parsed.error) })
       return
     }
-    setErrors({})
-    return true
-  }
-
-  async function copyPlainText(text: string) {
-    try {
-      await navigator.clipboard.writeText(text)
-    } catch {
-      const field = document.createElement('textarea')
-      field.value = text
-      field.setAttribute('readonly', '')
-      field.style.position = 'fixed'
-      field.style.opacity = '0'
-      document.body.appendChild(field)
-      field.select()
-      const ok = document.execCommand('copy')
-      document.body.removeChild(field)
-      if (!ok) throw new Error('copy failed')
-    }
-  }
-
-  async function persistAndHandoff(method: 'gmail_web' | 'mailto' | 'copy', goSent: boolean) {
-    if (!letter || selected.length === 0) return
-    let id = submissionId
+    const phone = parsed.data.phone.trim() ? (normalizeIndianPhone(parsed.data.phone) ?? parsed.data.phone) : ''
+    const details = { ...parsed.data, phone }
+    let letter = composeEmail({
+      campaign,
+      clauses: selected,
+      details: {
+        fullName: details.fullName,
+        addressLine: details.addressLine,
+        panchayat: details.panchayat,
+        village: details.village,
+        district: details.district,
+        pincode: details.pincode,
+        phone,
+        email: details.email,
+        customText: details.customText,
+        extraConcerns,
+      },
+      lang,
+    })
+    let submissionId: string | null = null
     try {
       const prepared = await prepareDemoLetter({
         campaignSlug: campaign.slug,
@@ -301,15 +321,19 @@ export function CampaignFlow({
         address: details.addressLine,
         panchayat: details.panchayat,
         village: details.village,
-        district: details.district,
+        district: postalIdentity.district || details.district,
         pincode: details.pincode,
         language: lang,
-        customText: '',
-        extraConcerns: extras,
+        customText: details.customText,
+        extraConcerns,
         clauseCodes: selected.map((clause) => clause.code),
-        letterMode: 'selected',
         constituencyId: null,
         ccRepIds: [],
+        privacyMode: privacyOn,
+        postOffice: postalIdentity.postOffice,
+        state: postalIdentity.state,
+        postalRegion: postalIdentity.postalRegion,
+        taluk: postalIdentity.taluk,
       })
       if (prepared.ok) {
         letter = { subject: prepared.data.subject, body: prepared.data.body, charCount: letter.charCount, error: null }
@@ -355,6 +379,7 @@ export function CampaignFlow({
             <p className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-accent">
               {t(lang, 'campaignStatus')}: {statusLabel(lang, view === 'live' ? 'live' : view === 'preview' ? 'preview' : view)}
             </p>
+            <LanguageToggle />
           </div>
           <h1 className="font-display mt-4 text-[1.85rem] text-ink sm:text-4xl">{title}</h1>
           <div className="mt-5 max-w-3xl space-y-4 text-base leading-relaxed text-body sm:text-lg">
@@ -385,11 +410,15 @@ export function CampaignFlow({
             </p>
           ) : null}
 
-      {view === 'inactive' ? (
-        <p className="mt-8 rounded-[8px] border border-rule bg-raised px-4 py-4 text-base text-ink">{t(lang, 'campaignInactivePublic')}</p>
-      ) : null}
-      {view === 'expired' ? (
-        <p className="mt-8 rounded-[8px] border border-rule bg-raised px-4 py-4 text-base text-ink">{t(lang, 'campaignExpiredThanks')}</p>
+          {actionable ? (
+            <button type="button" className={cx(btnPrimary, 'mt-8 w-full sm:w-auto')} onClick={goConcern}>
+              {t(lang, 'selectYourConcern')}
+              <IconChevronRight className="size-4 shrink-0" />
+            </button>
+          ) : null}
+          <p className="mt-4 max-w-xl text-sm leading-relaxed text-muted">{t(lang, 'trustLine')}</p>
+          <CampaignSources sources={sources} />
+        </section>
       ) : null}
 
       {actionable ? (
@@ -886,7 +915,7 @@ export function NoActiveCampaign() {
       <div className="flex justify-end">
         <LanguageToggle />
       </div>
-      <h1 className="font-display mt-6 text-2xl text-ink sm:text-3xl">{t(lang, 'noLiveTitle')}</h1>
+      <h1 className="font-display mt-6 text-2xl text-ink sm:text-3xl">{t(lang, 'noActiveCampaignTitle')}</h1>
       <p className="mt-4 max-w-2xl text-base leading-relaxed text-body sm:text-lg">{t(lang, 'noActiveCampaign')}</p>
     </PageContainer>
   )

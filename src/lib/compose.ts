@@ -16,6 +16,8 @@ export const GMAIL_URL_WARN = 8192
 /** Windows ShellExecute / mailto practical cap. Unicode letters percent-encode to ~9x. */
 export const MAILTO_URL_WARN = 30_000
 
+const GMAIL_ANDROID_PACKAGE = 'com.google.android.gm'
+
 export type ComposeDetails = {
   fullName: string
   addressLine: string
@@ -290,6 +292,28 @@ export function gmailComposeUrl(params: MailComposeParams, options?: { includeBo
   return `https://mail.google.com/mail/?${encodePairs(pairs)}`
 }
 
+/** Gmail app compose URL (iOS and Android). Same to/cc/subject/body as the web compose screen. */
+export function gmailAppComposeUrl(params: MailComposeParams, options?: { includeBody?: boolean }): string {
+  const to = toHeader(params.to)
+  const cc = ccHeader(params.cc)
+  const bcc = bccHeader(params.bcc)
+  const pairs: Array<[string, string]> = [['to', to]]
+  if (cc) pairs.push(['cc', cc])
+  if (bcc) pairs.push(['bcc', bcc])
+  pairs.push(['subject', params.subject])
+  if (options?.includeBody !== false) pairs.push(['body', params.body])
+  return `googlegmail:///co?${encodePairs(pairs)}`
+}
+
+/**
+ * Chrome/Android intent that opens the Gmail app (not Chrome) with the web compose URL.
+ * If Gmail is missing, Chrome uses browser_fallback_url.
+ */
+export function androidGmailAppIntent(webComposeUrl: string): string {
+  const rest = webComposeUrl.replace(/^https:\/\//, '')
+  return `intent://${rest}#Intent;scheme=https;package=${GMAIL_ANDROID_PACKAGE};S.browser_fallback_url=${encodeURIComponent(webComposeUrl)};end`
+}
+
 export function mailtoUrl(params: MailComposeParams, options?: { includeBody?: boolean }): string {
   const to = toHeader(params.to)
   const cc = ccHeader(params.cc)
@@ -313,8 +337,6 @@ export function gmailUrlTooLong(params: MailComposeParams): boolean {
 export function mailtoUrlTooLong(params: MailComposeParams): boolean {
   return mailtoUrl(params).length > MAILTO_URL_WARN
 }
-
-const GMAIL_ANDROID_PACKAGE = 'com.google.android.gm'
 
 function utf8Base64(text: string): string {
   const bytes = new TextEncoder().encode(text)

@@ -146,12 +146,49 @@ export function locationFromLookup(
     null
   return {
     postOffice: selected?.officeName || lookup.common.postOffice || undefined,
-    district: lookup.common.district || undefined,
-    state: lookup.common.state || undefined,
-    postalRegion: lookup.common.region || undefined,
-    taluk: lookup.common.taluk || undefined,
-    division: lookup.common.division || undefined,
-    circle: lookup.common.circle || undefined,
+    district: selected?.districtName || lookup.common.district || undefined,
+    state: selected?.stateName || lookup.common.state || undefined,
+    postalRegion: selected?.regionName || lookup.common.region || undefined,
+    taluk: selected?.talukName || lookup.common.taluk || undefined,
+    division: selected?.divisionName || lookup.common.division || undefined,
+    circle: selected?.circleName || lookup.common.circle || undefined,
+  }
+}
+
+export type PostalIdentityFields = {
+  postOffice: string
+  district: string
+  state: string
+  postalRegion: string
+  taluk: string
+}
+
+/** Flatten lookup + selected office into the form/letter identity fields. */
+export function postalIdentityFromLookup(
+  lookup: PostalLookup | null,
+  selectedOfficeName?: string,
+): PostalIdentityFields {
+  const location = locationFromLookup(lookup, selectedOfficeName)
+  return {
+    postOffice: location.postOffice ?? '',
+    district: location.district ?? '',
+    state: location.state ?? '',
+    postalRegion: location.postalRegion ?? '',
+    taluk: location.taluk ?? '',
+  }
+}
+
+export function withPostalIdentity<T extends { district: string }>(
+  details: T,
+  identity: Partial<PostalIdentityFields>,
+): T & PostalIdentityFields {
+  return {
+    ...details,
+    postOffice: identity.postOffice ?? '',
+    state: identity.state ?? '',
+    postalRegion: identity.postalRegion ?? '',
+    taluk: identity.taluk ?? '',
+    district: identity.district || details.district,
   }
 }
 

@@ -6,7 +6,9 @@ import {
   isValidPincode,
   locationFromLookup,
   mapDirectoryRow,
+  postalIdentityFromLookup,
   summarizePostalOffices,
+  withPostalIdentity,
   type PostalOffice,
 } from './postal'
 
@@ -98,4 +100,71 @@ test('does not invent taluk when the source omitted it', () => {
   const lookup = summarizePostalOffices('685531', [row], 'local')
   assert.equal(lookup.common.taluk, null)
   assert.equal(locationFromLookup(lookup).taluk, undefined)
+})
+
+test('selected office supplies its own taluk when offices disagree', () => {
+  const offices = [
+    office({
+      pincode: '685561',
+      officeName: 'Adimali',
+      officeType: 'SO',
+      districtName: 'Idukki',
+      stateName: 'Kerala',
+      regionName: 'Kochi',
+      talukName: 'Devikulam',
+    }),
+    office({
+      pincode: '685561',
+      officeName: 'Valara',
+      officeType: 'BO',
+      districtName: 'Idukki',
+      stateName: 'Kerala',
+      regionName: 'Kochi',
+      talukName: 'Idukki',
+    }),
+  ]
+  const lookup = summarizePostalOffices('685561', offices, 'local')
+  assert.equal(lookup.common.taluk, null)
+  const selected = locationFromLookup(lookup, 'Valara')
+  assert.equal(selected.postOffice, 'Valara')
+  assert.equal(selected.state, 'Kerala')
+  assert.equal(selected.postalRegion, 'Kochi')
+  assert.equal(selected.taluk, 'Idukki')
+  const identity = postalIdentityFromLookup(lookup, 'Valara')
+  assert.equal(identity.postOffice, 'Valara')
+  assert.equal(identity.state, 'Kerala')
+  assert.equal(identity.postalRegion, 'Kochi')
+  assert.equal(identity.taluk, 'Idukki')
+})
+
+test('PIN lookup identity fills post office, state, region, and taluk — not only district', () => {
+  const lookup = summarizePostalOffices(
+    '695001',
+    [
+      office({
+        pincode: '695001',
+        officeName: 'Thiruvananthapuram GPO',
+        officeType: 'HO',
+        districtName: 'Thiruvananthapuram',
+        stateName: 'Kerala',
+        regionName: 'Thiruvananthapuram',
+        talukName: 'Thiruvananthapuram',
+      }),
+    ],
+    'local',
+  )
+  const prev = {
+    fullName: 'Joseph',
+    district: '',
+    postOffice: '',
+    state: '',
+    postalRegion: '',
+    taluk: '',
+  }
+  const next = withPostalIdentity(prev, postalIdentityFromLookup(lookup))
+  assert.equal(next.district, 'Thiruvananthapuram')
+  assert.equal(next.postOffice, 'Thiruvananthapuram GPO')
+  assert.equal(next.state, 'Kerala')
+  assert.equal(next.postalRegion, 'Thiruvananthapuram')
+  assert.equal(next.taluk, 'Thiruvananthapuram')
 })

@@ -6,6 +6,8 @@ import {
   formatCompleteEmailCopy,
   androidSendIntent,
   formatUnsentEml,
+  gmailAppComposeUrl,
+  androidGmailAppIntent,
   gmailComposeUrl,
   liveMailTargets,
   mailtoUrl,
@@ -177,6 +179,26 @@ const headersOnly = gmailComposeUrl(
   { includeBody: false },
 )
 assert.doesNotMatch(headersOnly, /[?&]body=/)
+
+const appUrl = gmailAppComposeUrl({
+  to: targets.to,
+  cc: targets.cc,
+  subject: full.subject,
+  body: selected.body,
+})
+assert.match(appUrl, /^googlegmail:\/\/\/co\?/)
+assert.match(appUrl, /to=min\.for%40kerala\.gov\.in/)
+assert.match(appUrl, /cc=prlsecy\.forest%40kerala\.gov\.in/)
+assert.match(appUrl, /subject=/)
+assert.doesNotMatch(appUrl, /undefined/)
+assert.ok(appUrl.includes(encodeURIComponent(selected.body)))
+
+const appIntent = androidGmailAppIntent(gmail)
+assert.match(appIntent, /^intent:\/\/mail\.google\.com\/mail\//)
+assert.match(appIntent, /package=com\.google\.android\.gm/)
+assert.match(appIntent, /scheme=https/)
+assert.ok(appIntent.includes(encodeURIComponent(gmail)))
+assert.ok(appIntent.endsWith(';end'))
 
 const withBcc = {
   ...fixtureCampaign,
