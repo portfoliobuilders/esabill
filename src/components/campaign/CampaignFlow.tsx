@@ -413,12 +413,9 @@ export function CampaignFlow({
       <StatusRegion message={status} />
 
       <section>
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <p className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-accent">
-            {t(lang, 'campaignStatus')}: {statusLabel(lang, view)}
-          </p>
-          <LanguageToggle />
-        </div>
+        <p className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-accent">
+          {t(lang, 'campaignStatus')}: {statusLabel(lang, view)}
+        </p>
         <h1 lang={lang} className="font-display mt-4 text-[1.85rem] text-ink sm:text-4xl">
           {title}
         </h1>
