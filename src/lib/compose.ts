@@ -226,20 +226,6 @@ function assembleBody(
   const stored = pick(lang, campaign.body_template_ml ?? '', campaign.body_template_en ?? '').trim()
   const template = stored || defaultBodyTemplate(lang)
   const config = campaignConcernConfig(campaign)
-  const identity = identityBlock(
-    {
-      fullName: details.fullName,
-      pincode: details.pincode,
-      phone: details.phone,
-      addressLine: details.addressLine,
-      postOffice: details.postOffice,
-      district: details.district,
-      state: details.state,
-      postalRegion: details.postalRegion,
-      taluk: details.taluk,
-    },
-    lang,
-  )
   const values: EmailTemplateValues = {
     intro,
     closing,
@@ -249,7 +235,7 @@ function assembleBody(
       extraConcerns: extras,
       lang,
     }),
-    ...senderValues(details, identity),
+    ...senderValues(details, lang),
   }
   return renderSafeTemplate(template, values)
 }
