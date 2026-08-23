@@ -39,7 +39,7 @@ test('phone and address stay disabled unless admin enables them', () => {
   assert.equal(isFieldEnabled(fields, 'name'), true)
   assert.equal(isFieldRequired(fields, 'name'), true)
   assert.equal(isFieldEnabled(fields, 'pincode'), true)
-  assert.equal(isFieldRequired(fields, 'pincode'), true)
+  assert.equal(isFieldRequired(fields, 'pincode'), false)
   const phone = applyFieldMode(fields.find((field) => field.field_key === 'phone')!, 'optional')
   assert.equal(phone.is_enabled, true)
   assert.equal(phone.is_required, false)

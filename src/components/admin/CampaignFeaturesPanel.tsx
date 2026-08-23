@@ -28,8 +28,8 @@ export function CampaignFeaturesPanel({
             value={value.identity_mode}
             onChange={(event) => onChange({ identity_mode: event.target.value as IdentityMode })}
           >
-            <option value="required">Name and PIN required</option>
-            <option value="optional">Name and PIN optional</option>
+            <option value="required">Name required</option>
+            <option value="optional">Name optional</option>
           </select>
         </label>
 
