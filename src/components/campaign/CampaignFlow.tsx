@@ -92,6 +92,7 @@ export function CampaignFlow({
   districts,
   mode,
   view,
+  aiConfigured = false,
   sources = [],
   aiConfigured = false,
 }: {
@@ -101,6 +102,7 @@ export function CampaignFlow({
   districts: { value: string; labelEn: string; labelMl: string }[]
   mode: WizardMode
   view: 'live' | 'preview' | 'inactive' | 'expired'
+  aiConfigured?: boolean
   sources?: CampaignSource[]
   aiConfigured?: boolean
 }) {
@@ -612,11 +614,7 @@ export function CampaignFlow({
                           id="post-office"
                           className={inputClass}
                           value={officeName}
-                          onChange={(event) => {
-                            const name = event.target.value
-                            setOfficeName(name)
-                            setDetails((prev) => detailsFromLookup(prev, lookup, name))
-                          }}
+                          onChange={(event) => setOfficeName(event.target.value)}
                         >
                           <option value="">{t(lang, 'selectPostOffice')}</option>
                           {lookup.offices.map((office) => (

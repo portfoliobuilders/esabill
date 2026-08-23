@@ -47,10 +47,7 @@ export default async function EditCampaignPage({
   const sourcesLoadError = sourcesResult.error
     ? 'Could not load sources. Apply the campaign_sources database migration, then reload.'
     : null
-  const [postalCount, aiConfigured] = await Promise.all([
-    postalDirectoryCount(),
-    Promise.resolve(aiServerConfigured()),
-  ])
+  const [postalCount, aiConfigured] = await Promise.all([postalDirectoryCount(), Promise.resolve(aiServerConfigured())])
   return (
     <CampaignStudio
       campaign={publicCampaign(campaign as Campaign)}

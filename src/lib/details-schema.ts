@@ -103,7 +103,7 @@ export function createDetailsSchema(
           .string()
           .trim()
           .refine((value) => !value || districts.length === 0 || districts.includes(value), t(lang, 'errorDistrict'))
-    : optionalText()
+    : optionalText
 
   const address = isFieldRequired(fields, 'address') && !privacy ? requiredText(t(lang, 'errorAddress')) : optionalText()
   const panchayat = isFieldRequired(fields, 'local_body') && !privacy ? requiredText(t(lang, 'panchayat')) : optionalText()

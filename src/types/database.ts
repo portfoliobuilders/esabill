@@ -28,8 +28,6 @@ export type FormFieldKey =
   | 'custom_message'
   | 'pincode'
 
-export type ConcernSelectionMode = 'single' | 'multiple'
-
 export type AiBodyStatus = 'none' | 'draft' | 'approved'
 
 export type Campaign = {
