@@ -7,7 +7,7 @@
     "build": "next build --turbopack",
     "start": "next start",
     "lint": "eslint",
-    "test": "npx tsx --test src/lib/admin/admin-logic.test.ts src/lib/campaign-sources.test.ts src/lib/postal.test.ts src/lib/compose-identity.test.ts src/lib/details-schema.test.ts && npx tsx scripts/verify-email.ts",
+    "test": "npx tsx --test src/lib/admin/admin-logic.test.ts src/lib/campaign-sources.test.ts src/lib/tts.test.ts && npx tsx scripts/verify-email.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

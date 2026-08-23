@@ -16,11 +16,8 @@ import { AdminPageHeader, ConfirmDialog, ErrorState, SaveStatus, SuccessBanner }
 import { CampaignFeaturesPanel } from '@/components/admin/CampaignFeaturesPanel'
 import { CampaignSourcesEditor } from '@/components/admin/CampaignSourcesEditor'
 import { adminBtnDanger, adminBtnPrimary, adminBtnSecondary, adminInput, adminLabel } from '@/components/admin/admin-ui'
-import {
-  ConcernSelectionSettings,
-  draftFromCampaign,
-  type ConcernSelectionDraft,
-} from '@/components/admin/ConcernSelectionSettings'
+import { CampaignFeaturesPanel } from '@/components/admin/CampaignFeaturesPanel'
+import { ConcernSelectionSettings, draftFromCampaign, type ConcernSelectionDraft } from '@/components/admin/ConcernSelectionSettings'
 import { formatDatetimeLocal } from '@/lib/admin/format'
 import { CAMPAIGN_STATUS_LABEL, type CampaignStatus } from '@/lib/campaign-status'
 import { parseFeatureSettings, type CampaignFeatureSettings } from '@/lib/campaign-features'

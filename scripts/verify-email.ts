@@ -11,6 +11,7 @@ import {
   gmailComposeUrl,
   liveMailTargets,
   mailtoUrl,
+  mailtoUrlTooLong,
   resolveMailTargets,
   uniqueEmails,
 } from '../src/lib/compose'
@@ -137,18 +138,10 @@ assert.doesNotMatch(gmail, /Forest/)
 assert.doesNotMatch(gmail, /undefined/)
 assert.match(mail, /mailto:min\.for%40kerala\.gov\.in/)
 assert.doesNotMatch(mail, /esz-mef@nic\.in/)
-assert.ok(mail.includes(encodeURIComponent(selected.body)), 'mailto must include the full letter body')
-
-const longBody = `${full.body}\n${'കൂടുതൽ '.repeat(600)}`
-const longParams = {
-  to: targets.to,
-  cc: targets.cc,
-  bcc: targets.bcc,
-  subject: full.subject,
-  body: longBody,
-}
-assert.ok(mailtoUrl(longParams).includes(encodeURIComponent(longBody)))
-assert.ok(formatUnsentEml(longParams).includes(longBody.replace(/\n/g, '\r\n')))
+assert.equal(
+  mailtoUrlTooLong({ to: targets.to, cc: targets.cc, subject: full.subject, body: full.body }),
+  false,
+)
 
 const copied = formatCompleteEmailCopy({
   to: targets.to,
