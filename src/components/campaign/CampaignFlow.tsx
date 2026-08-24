@@ -10,18 +10,10 @@ import { LanguageToggle } from '@/components/LanguageToggle'
 import { useLang } from '@/components/LanguageProvider'
 import { IconChevronRight, IconCopy, IconEnvelope, IconGmail } from '@/components/ui/icons'
 import { PageContainer } from '@/components/ui/PageContainer'
-import {
-  androidSendIntent,
-  composeEmail,
-  formatCompleteEmailCopy,
-  gmailComposeUrl,
-  gmailUrlTooLong,
-  mailtoUrl,
-  mailtoUrlTooLong,
-  resolveMailTargets,
-  type MailComposeParams,
-} from '@/lib/compose'
-import { approvedAiBody, concernBody, concernShort, concernTitle } from '@/lib/compose-concerns'
+import { ConcernSelector } from '@/components/wizard/ConcernSelector'
+import { composeEmail, concernTitle, formatCompleteEmailCopy, resolveMailTargets, type MailComposeParams } from '@/lib/compose'
+import { applyGmailHandoff, clientPlatform, planGmailHandoff } from '@/lib/gmail-handoff'
+import { launchMailCompose } from '@/lib/open-mail'
 import {
   applyPredefinedConcernClick,
   campaignConcernConfig,
@@ -42,17 +34,96 @@ import {
 import { fieldByKey, isFieldEnabled, isFieldRequired } from '@/lib/form-fields'
 import { formatCampaignDate } from '@/lib/format-date'
 import { t, tReplace, type Lang } from '@/lib/i18n'
-import {
-  compactLocationLine,
-  isValidPincode,
-  withPostalIdentity,
-  postalIdentityFromLookup,
-  type PostalLookup,
-} from '@/lib/postal'
-import { btnGhost, btnPrimary, btnSecondary, focusRing, inputClass, labelClass } from '@/lib/ui'
+import type { DistrictOption } from '@/lib/kerala-districts'
+import { normalizeIndianPhone } from '@/lib/phone'
+import { btnGhost, btnPrimary, btnSecondary, inputClass, labelClass } from '@/lib/ui'
 import type { WizardMode } from '@/lib/wizard-mode'
 import { isDryRun } from '@/lib/wizard-mode'
 import type { Campaign, CampaignFormField, CampaignSource, ObjectionClause } from '@/types/database'
+
+type Step = 1 | 2 | 3 | 4 | 5
+type CanonicalLetter = { subject: string; body: string }
+
+type FlowState = {
+  step: Step
+  selectedIds: string[]
+  customConcerns: string[]
+  details: DetailsFields
+  detailsErrors: FieldErrors
+  concernError: boolean
+  maxError: boolean
+  letter: CanonicalLetter | null
+  submissionId: string | null
+}
+
+type Action =
+  | { type: 'select'; id: string; multiple: boolean; maxSelections: number | null }
+  | { type: 'set_custom'; index: number; text: string }
+  | { type: 'add_custom' }
+  | { type: 'remove_custom'; index: number }
+  | { type: 'set_details'; details: Partial<DetailsFields> }
+  | { type: 'details_invalid'; errors: FieldErrors }
+  | { type: 'goto'; step: Step }
+  | { type: 'concern_error' }
+  | { type: 'max_error' }
+  | {
+      type: 'ready_review'
+      details: DetailsFields
+      letter: CanonicalLetter
+      submissionId: string | null
+    }
+
+function reducer(state: FlowState, action: Action): FlowState {
+  switch (action.type) {
+    case 'select': {
+      const next = applyPredefinedConcernClick({
+        mode: action.multiple ? 'multiple' : 'single',
+        selectedIds: state.selectedIds,
+        id: action.id,
+        maxSelections: action.maxSelections,
+      })
+      return { ...state, concernError: false, maxError: next.limited, selectedIds: next.selectedIds }
+    }
+    case 'set_custom': {
+      const customConcerns = [...state.customConcerns]
+      customConcerns[action.index] = action.text
+      const detailsErrors = { ...state.detailsErrors }
+      delete detailsErrors.customText
+      return { ...state, customConcerns, detailsErrors }
+    }
+    case 'add_custom':
+      return { ...state, customConcerns: [...state.customConcerns, ''] }
+    case 'remove_custom':
+      return {
+        ...state,
+        customConcerns: state.customConcerns.filter((_, index) => index !== action.index),
+      }
+    case 'set_details': {
+      const detailsErrors = { ...state.detailsErrors }
+      for (const key of Object.keys(action.details) as Array<keyof DetailsFields>) delete detailsErrors[key]
+      return { ...state, details: { ...state.details, ...action.details }, detailsErrors }
+    }
+    case 'details_invalid':
+      return { ...state, detailsErrors: action.errors }
+    case 'goto':
+      return { ...state, step: action.step }
+    case 'concern_error':
+      return { ...state, concernError: true }
+    case 'max_error':
+      return { ...state, maxError: true }
+    case 'ready_review':
+      return {
+        ...state,
+        details: action.details,
+        detailsErrors: {},
+        letter: action.letter,
+        submissionId: action.submissionId,
+        step: 4,
+      }
+    default:
+      return state
+  }
+}
 
 function pick(lang: Lang, ml: string, en: string) {
   return lang === 'en' ? en : ml
@@ -65,22 +136,6 @@ function statusLabel(lang: Lang, mode: WizardMode | 'inactive' | 'expired') {
   return t(lang, 'statusDraft')
 }
 
-const pinCache = new Map<string, PostalLookup>()
-
-function detailsFromLookup(prev: DetailsFields, lookup: PostalLookup | null, office: string): DetailsFields {
-  const next = withPostalIdentity(prev, postalIdentityFromLookup(lookup, office))
-  if (
-    next.district === prev.district &&
-    next.postOffice === prev.postOffice &&
-    next.state === prev.state &&
-    next.postalRegion === prev.postalRegion &&
-    next.taluk === prev.taluk
-  ) {
-    return prev
-  }
-  return next
-}
-
 export function CampaignFlow({
   campaign,
   clauses,
@@ -88,7 +143,6 @@ export function CampaignFlow({
   districts,
   mode,
   view,
-  aiConfigured = false,
   sources = [],
 }: {
   campaign: Campaign
@@ -97,126 +151,26 @@ export function CampaignFlow({
   districts: DistrictOption[]
   mode: WizardMode
   view: 'live' | 'preview' | 'inactive' | 'expired'
-  aiConfigured?: boolean
   sources?: CampaignSource[]
   aiConfigured?: boolean
 }) {
   const { lang } = useLang()
   const actionable = view === 'live' || view === 'preview'
   const config = campaignConcernConfig(campaign)
-  const features = parseFeatureSettings(campaign.feature_settings)
-  const multi = isMultiSelect(config.mode)
-  const customCopy = customConcernCopy(config, lang)
+  const [state, dispatch] = useReducer(reducer, {
+    step: 1 as Step,
+    selectedIds: [],
+    customConcerns: config.allowCustomConcern ? [''] : [],
+    details: emptyDetails(),
+    detailsErrors: {},
+    concernError: false,
+    maxError: false,
+    letter: null,
+    submissionId: null,
+  })
 
-  const [selectedIds, setSelectedIds] = useState<string[]>([])
-  const [customConcern, setCustomConcern] = useState('')
-  const [details, setDetails] = useState<DetailsFields>(emptyDetails)
-  const [privacyMode, setPrivacyMode] = useState(false)
-  const [errors, setErrors] = useState<FieldErrors>({})
-  const [concernError, setConcernError] = useState(false)
-  const [lookup, setLookup] = useState<PostalLookup | null>(null)
-  const [lookupState, setLookupState] = useState<'idle' | 'loading' | 'done'>('idle')
-  const [officeName, setOfficeName] = useState('')
-  const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [improved, setImproved] = useState<{ concernId: string; body: string } | null>(null)
-  const [improving, setImproving] = useState(false)
-  const [aiError, setAiError] = useState('')
-  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle')
-  const [pasteHint, setPasteHint] = useState(false)
-  const [status, setStatus] = useState('')
-  const [submissionId, setSubmissionId] = useState<string | null>(null)
-  const abortRef = useRef<AbortController | null>(null)
-  const aiAbort = useRef<AbortController | null>(null)
-
-  const privacyOn = privacyMode && features.allow_privacy_mode
-  const selected = selectedClausesForLetter(clauses, selectedIds)
-  const extras = useMemo(
-    () => (config.allowCustomConcern ? flattenCustomConcerns([customConcern]) : []),
-    [config.allowCustomConcern, customConcern],
-  )
-  const postalIdentity = useMemo(
-    () => (privacyOn ? postalIdentityFromLookup(null) : postalIdentityFromLookup(lookup, officeName)),
-    [privacyOn, lookup, officeName],
-  )
-
-  const clausesForMail = useMemo(() => {
-    if (!improved) return selected
-    return selected.map((clause) =>
-      clause.id === improved.concernId
-        ? {
-            ...clause,
-            email_body_en: improved.body,
-            email_body_ml: improved.body,
-            email_en: improved.body,
-            email_ml: improved.body,
-            full_text_en: improved.body,
-            full_text_ml: improved.body,
-          }
-        : clause,
-    )
-  }, [selected, improved])
-
-  const letter = useMemo(() => {
-    if (selected.length === 0) return null
-    return composeEmail({
-      campaign,
-      clauses: clausesForMail,
-      details: {
-        ...withPostalIdentity(details, postalIdentity),
-        extraConcerns: extras,
-        customText: '',
-        privacyMode: privacyOn,
-      },
-      lang,
-    })
-  }, [campaign, clausesForMail, details, extras, lang, postalIdentity, privacyOn, selected.length])
-
-  useEffect(() => {
-    if (!features.enable_pin_lookup || privacyOn) return
-    const pin = details.pincode.trim()
-    if (!isValidPincode(pin)) {
-      setLookup(null)
-      setLookupState('idle')
-      setOfficeName('')
-      setDetails((prev) => detailsFromLookup(prev, null, ''))
-      return
-    }
-    const cached = pinCache.get(pin)
-    if (cached) {
-      const office = cached.common.postOffice || ''
-      setLookup(cached)
-      setLookupState('done')
-      setOfficeName(office)
-      setDetails((prev) => detailsFromLookup(prev, cached, office))
-      setStatus(compactLocationLine(cached.common) || t(lang, 'locationStatus'))
-      return
-    }
-    abortRef.current?.abort()
-    const controller = new AbortController()
-    abortRef.current = controller
-    setLookupState('loading')
-    setStatus(t(lang, 'findingLocation'))
-    fetch(`/api/pincode/${pin}`, { signal: controller.signal })
-      .then((response) => response.json())
-      .then((data: PostalLookup) => {
-        pinCache.set(pin, data)
-        const office = data.common.postOffice || ''
-        setLookup(data)
-        setLookupState('done')
-        setOfficeName(office)
-        setDetails((prev) => detailsFromLookup(prev, data, office))
-        if (data.found) setStatus(compactLocationLine(data.common) || t(lang, 'locationStatus'))
-        else setStatus(t(lang, 'pinNotFound'))
-      })
-      .catch((error: unknown) => {
-        if (error instanceof DOMException && error.name === 'AbortError') return
-        setLookupState('done')
-        setLookup(null)
-        setStatus(t(lang, 'pinNotFound'))
-      })
-    return () => controller.abort()
-  }, [details.pincode, features.enable_pin_lookup, lang, privacyOn])
-
+  const selected = selectedClausesForLetter(clauses, state.selectedIds)
+  const extraConcerns = config.allowCustomConcern ? flattenCustomConcerns(state.customConcerns) : []
   const title = pick(lang, campaign.title_ml, campaign.title_en)
   const description = pick(lang, campaign.homepage_intro_ml || campaign.summary_ml, campaign.homepage_intro_en || campaign.summary_en)
   const deadline = formatCampaignDate(campaign.deadline_at, lang)
@@ -279,19 +233,6 @@ export function CampaignFlow({
     dispatch({ type: 'goto', step: 3 })
   }
 
-  function selectConcern(id: string) {
-    const next = applyPredefinedConcernClick({
-      mode: config.mode,
-      selectedIds,
-      id,
-      maxSelections: config.maxSelections,
-    })
-    setSelectedIds(next.selectedIds)
-    setConcernError(false)
-    setImproved(null)
-    setAiError('')
-  }
-
   async function goReview() {
     const parsed = createDetailsSchema(
       lang,
@@ -331,7 +272,7 @@ export function CampaignFlow({
         address: details.addressLine,
         panchayat: details.panchayat,
         village: details.village,
-        district: postalIdentity.district || details.district,
+        district: details.district,
         pincode: details.pincode,
         language: lang,
         customText: details.customText,
@@ -339,11 +280,6 @@ export function CampaignFlow({
         clauseCodes: selected.map((clause) => clause.code),
         constituencyId: null,
         ccRepIds: [],
-        privacyMode: privacyOn,
-        postOffice: postalIdentity.postOffice,
-        state: postalIdentity.state,
-        postalRegion: postalIdentity.postalRegion,
-        taluk: postalIdentity.taluk,
       })
       if (prepared.ok) {
         letter = { subject: prepared.data.subject, body: prepared.data.body, charCount: letter.charCount, error: null }
@@ -360,28 +296,9 @@ export function CampaignFlow({
     })
   }
 
-  async function sendMailto() {
-    if (!validate()) return
-    const params = mailParams()
-    if (!params || params.to.length === 0) return
-    setPasteHint(false)
-    const ua = navigator.userAgent
-    if (/Android/i.test(ua)) {
-      await copyPlainText(params.body).catch(() => undefined)
-      window.location.href = androidSendIntent(params, { fallbackUrl: mailtoUrl(params, { includeBody: false }) })
-      await persistAndHandoff('mailto', false)
-      return
-    }
-    if (mailtoUrlTooLong(params)) {
-      await copyPlainText(params.body).catch(() => undefined)
-      window.location.href = mailtoUrl(params, { includeBody: false })
-      setPasteHint(true)
-      await persistAndHandoff('mailto', false)
-      return
-    }
-    window.location.href = mailtoUrl(params)
-    await persistAndHandoff('mailto', false)
-  }
+  return (
+    <PageContainer>
+      {state.step > 1 && actionable ? <CampaignProgress step={state.step} /> : null}
 
       {state.step === 1 ? (
         <section>
@@ -431,192 +348,49 @@ export function CampaignFlow({
         </section>
       ) : null}
 
-      {actionable ? (
-        <form
-          className="mt-10 min-w-0 space-y-8"
-          lang={lang}
-          onSubmit={(event) => {
-            event.preventDefault()
-            void sendMailto()
-          }}
-        >
-          <fieldset>
-            <legend className="font-display text-2xl text-ink">{t(lang, 'chooseYourConcern')}</legend>
-            <p className="mt-2 text-base text-body">{multi ? t(lang, 'concernsLeadMultiple') : t(lang, 'concernsLead')}</p>
-            <ul className="mt-5 space-y-3">
-              {clauses.map((clause, index) => {
-                const on = selectedIds.includes(clause.id)
-                const expanded = expandedId === clause.id
-                const short = concernShort(clause, lang)
-                const full = concernBody(clause, lang)
-                const needsMore = full.length > short.length + 8
-                return (
-                  <li key={clause.id}>
-                    <label
-                      className={cx(
-                        'flex min-h-11 cursor-pointer gap-3 rounded-[10px] border p-4',
-                        on ? 'border-accent bg-accent-tint' : 'border-rule bg-raised',
-                      )}
-                    >
-                      <input
-                        type={multi ? 'checkbox' : 'radio'}
-                        name="campaign-concern"
-                        className="mt-1 size-6 shrink-0 accent-[var(--color-accent)]"
-                        checked={on}
-                        onChange={() => selectConcern(clause.id)}
-                      />
-                      <span className="min-w-0">
-                        <span className="flex flex-wrap items-center gap-2">
-                          <span className="font-mono text-xs font-semibold text-accent">{String(index + 1).padStart(2, '0')}</span>
-                          {on ? (
-                            <span className="inline-flex items-center gap-1 text-sm font-semibold text-accent">
-                              <IconCheck className="size-4" />
-                              {t(lang, 'selectedVisible')}
-                            </span>
-                          ) : null}
-                        </span>
-                        <span className="mt-1 block text-base font-semibold leading-snug text-ink sm:text-lg">
-                          {concernTitle(clause, lang)}
-                        </span>
-                        <span className="mt-2 block text-sm leading-relaxed text-body sm:text-base">{expanded ? full : short}</span>
-                        {needsMore ? (
-                          <button
-                            type="button"
-                            className={cx('mt-2 min-h-11 text-sm font-semibold text-accent', focusRing)}
-                            onClick={(event) => {
-                              event.preventDefault()
-                              setExpandedId(expanded ? null : clause.id)
-                            }}
-                          >
-                            {expanded ? t(lang, 'readLess') : t(lang, 'readMore')}
-                          </button>
-                        ) : null}
-                      </span>
-                    </label>
-                  </li>
-                )
-              })}
-            </ul>
-            {concernError ? (
-              <p className="mt-3 text-sm text-red-800" role="alert">
-                {multi ? t(lang, 'minClausesHintMultiple') : t(lang, 'minClausesHint')}
-              </p>
-            ) : null}
-          </p>
-        ) : null}
-        <p className="mt-4 max-w-xl text-sm leading-relaxed text-muted">{t(lang, 'trustLine')}</p>
-        <CampaignSources sources={sources} />
-      </section>
-
-      {view === 'inactive' ? (
-        <p className="mt-8 rounded-[8px] border border-rule bg-raised px-4 py-4 text-base text-ink">{t(lang, 'campaignInactivePublic')}</p>
-      ) : null}
-      {view === 'expired' ? (
-        <p className="mt-8 rounded-[8px] border border-rule bg-raised px-4 py-4 text-base text-ink">{t(lang, 'campaignExpiredThanks')}</p>
-      ) : null}
-
-      {actionable ? (
-        <form
-          className="mt-10 min-w-0 space-y-8"
-          lang={lang}
-          onSubmit={(event) => {
-            event.preventDefault()
-            void sendMailto()
-          }}
-        >
-          <fieldset>
-            <legend className="font-display text-2xl text-ink">{t(lang, 'chooseYourConcern')}</legend>
-            <p className="mt-2 text-base text-body">{multi ? t(lang, 'concernsLeadMultiple') : t(lang, 'concernsLead')}</p>
-            <ul className="mt-5 space-y-3">
-              {clauses.map((clause, index) => {
-                const on = selectedIds.includes(clause.id)
-                const expanded = expandedId === clause.id
-                const short = concernShort(clause, lang)
-                const full = concernBody(clause, lang)
-                const needsMore = full.length > short.length + 8
-                return (
-                  <li key={clause.id}>
-                    <label
-                      className={cx(
-                        'flex min-h-11 cursor-pointer gap-3 rounded-[10px] border p-4',
-                        on ? 'border-accent bg-accent-tint' : 'border-rule bg-raised',
-                      )}
-                    >
-                      <input
-                        type={multi ? 'checkbox' : 'radio'}
-                        name="campaign-concern"
-                        className="mt-1 size-6 shrink-0 accent-[var(--color-accent)]"
-                        checked={on}
-                        onChange={() => selectConcern(clause.id)}
-                      />
-                      <span className="min-w-0">
-                        <span className="flex flex-wrap items-center gap-2">
-                          <span className="font-mono text-xs font-semibold text-accent">{String(index + 1).padStart(2, '0')}</span>
-                          {on ? (
-                            <span className="inline-flex items-center gap-1 text-sm font-semibold text-accent">
-                              <IconCheck className="size-4" />
-                              {t(lang, 'selectedVisible')}
-                            </span>
-                          ) : null}
-                        </span>
-                        <span className="mt-1 block text-base font-semibold leading-snug text-ink sm:text-lg">
-                          {concernTitle(clause, lang)}
-                        </span>
-                        <span className="mt-2 block text-sm leading-relaxed text-body sm:text-base">{expanded ? full : short}</span>
-                        {needsMore ? (
-                          <button
-                            type="button"
-                            className={cx('mt-2 min-h-11 text-sm font-semibold text-accent', focusRing)}
-                            onClick={(event) => {
-                              event.preventDefault()
-                              setExpandedId(expanded ? null : clause.id)
-                            }}
-                          >
-                            {expanded ? t(lang, 'readLess') : t(lang, 'readMore')}
-                          </button>
-                        ) : null}
-                      </span>
-                    </label>
-                  </li>
-                )
-              })}
-            </ul>
-            {concernError ? (
-              <p className="mt-3 text-sm text-red-800" role="alert">
-                {multi ? t(lang, 'minClausesHintMultiple') : t(lang, 'minClausesHint')}
-              </p>
-            ) : null}
-          </fieldset>
-
-          {config.allowCustomConcern ? (
-            <div>
-              <div className="flex items-end justify-between gap-3">
-                <label htmlFor="custom-concern" className={labelClass}>
-                  {customCopy.label || t(lang, 'moreToSay')}
-                  <span className="font-normal text-muted"> ({t(lang, 'optional')})</span>
-                </label>
-                {showVoice ? (
-                  <VoiceInputButton
-                    lang={lang}
-                    fieldId="custom-concern"
-                    value={customConcern}
-                    onChange={setCustomConcern}
-                    onStatus={setStatus}
-                  />
-                ) : null}
-              </div>
-              <textarea
-                id="custom-concern"
-                className={`${inputClass} min-h-28 resize-y py-2`}
-                maxLength={MAX_CUSTOM_CHARS}
-                value={customConcern}
-                placeholder={customCopy.placeholder}
-                onChange={(event) => setCustomConcern(event.target.value)}
-              />
-            </div>
+      {state.step === 2 ? (
+        <section>
+          <ConcernSelector
+            campaign={campaign}
+            clauses={clauses}
+            selectedIds={state.selectedIds}
+            customConcerns={state.customConcerns}
+            customError={state.detailsErrors.customText}
+            maxError={state.maxError}
+            onSelect={(id) =>
+              dispatch({
+                type: 'select',
+                id,
+                multiple: config.mode === 'multiple',
+                maxSelections: config.maxSelections,
+              })
+            }
+            onCustomChange={(index, text) => dispatch({ type: 'set_custom', index, text })}
+            onAddCustom={() => dispatch({ type: 'add_custom' })}
+            onRemoveCustom={(index) => dispatch({ type: 'remove_custom', index })}
+          />
+          {state.concernError ? (
+            <p className="mt-3 text-sm text-red-800" role="alert">
+              {config.mode === 'single' ? t(lang, 'minClausesHint') : t(lang, 'minClausesHintMultiple')}
+            </p>
           ) : null}
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+            <button type="button" className={cx(btnGhost, 'w-full sm:w-auto')} onClick={() => dispatch({ type: 'goto', step: 1 })}>
+              {t(lang, 'back')}
+            </button>
+            <button type="button" className={cx(btnPrimary, 'w-full sm:flex-1')} onClick={goDetails}>
+              {t(lang, 'continue')}
+              <IconChevronRight className="size-4 shrink-0" />
+            </button>
+          </div>
+        </section>
+      ) : null}
 
-          {isFieldEnabled(formFields, 'name') && !privacyOn ? (
+      {state.step === 3 ? (
+        <section>
+          <h1 className="font-display text-2xl text-ink sm:text-3xl">{t(lang, 'yourDetails')}</h1>
+          <p className="mt-2 text-base leading-relaxed text-body">{t(lang, 'privacyDetails')}</p>
+          <div className="mt-6 grid gap-4">
             <Field
               lang={lang}
               fields={formFields}
@@ -625,83 +399,26 @@ export function CampaignFlow({
               error={state.detailsErrors.fullName}
               onChange={(value) => dispatch({ type: 'set_details', details: { fullName: value } })}
             />
-          ) : null}
-
-          {isFieldEnabled(formFields, 'pincode') && !privacyOn ? (
-            <div>
-              <label htmlFor="pincode" className={labelClass}>
-                {labelForField(formFields, 'pincode', lang, t(lang, 'pincode'))}
-                {isFieldRequired(formFields, 'pincode') ? (
-                  <span className="text-accent"> *</span>
-                ) : (
-                  <span className="font-normal text-muted"> ({t(lang, 'optional')})</span>
-                )}
-              </label>
-              <input
-                id="pincode"
-                inputMode="numeric"
-                autoComplete="postal-code"
-                pattern="[1-9][0-9]{5}"
-                maxLength={6}
-                className={inputClass}
-                value={details.pincode}
-                aria-required={isFieldRequired(formFields, 'pincode')}
-                aria-invalid={Boolean(errors.pincode)}
-                aria-describedby={errors.pincode ? 'pincode-error' : lookupState !== 'idle' ? 'pincode-status' : undefined}
-                onChange={(event) => patchDetails({ pincode: event.target.value.replace(/\D/g, '').slice(0, 6) })}
-              />
-              {lookupState === 'loading' ? (
-                <p id="pincode-status" className="mt-2 text-sm text-muted">
-                  {t(lang, 'findingLocation')}
-                </p>
-              ) : lookup?.found ? (
-                <div id="pincode-status" className="mt-2 text-sm text-ink">
-                  <p className="font-semibold text-accent">
-                    ✓ {locationLine}
-                  </p>
-                  {lookup.common.postOffice || lookup.common.region ? (
-                    <p className="mt-1 text-body">
-                      {lookup.common.postOffice ? `${lookup.common.postOffice}` : ''}
-                      {lookup.common.postOffice && lookup.common.region ? ' · ' : ''}
-                      {lookup.common.region ? `${t(lang, 'postalRegion')}: ${lookup.common.region}` : ''}
-                    </p>
-                  ) : null}
-                  {lookup.askPostOffice ? (
-                    <div className="mt-3">
-                      <p className="text-body">{t(lang, 'multiplePostOffices')}</p>
-                      <label htmlFor="post-office" className={`${labelClass} mt-2`}>
-                        {t(lang, 'postOffice')}
-                        <select
-                          id="post-office"
-                          className={inputClass}
-                          value={officeName}
-                          onChange={(event) => setOfficeName(event.target.value)}
-                        >
-                          <option value="">{t(lang, 'selectPostOffice')}</option>
-                          {lookup.offices.map((office) => (
-                            <option key={office.officeName} value={office.officeName}>
-                              {office.officeName}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    </div>
-                  ) : null}
-                </div>
-              ) : lookupState === 'done' && isValidPincode(details.pincode) ? (
-                <p id="pincode-status" className="mt-2 text-sm text-muted">
-                  {t(lang, 'pinNotFound')}
-                </p>
-              ) : null}
-              {errors.pincode ? (
-                <p id="pincode-error" className="mt-1 text-sm text-red-800" role="alert">
-                  {errors.pincode}
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-
-          {isFieldEnabled(formFields, 'phone') && !privacyOn ? (
+            <Field
+              lang={lang}
+              fields={formFields}
+              fieldKey="pincode"
+              inputMode="numeric"
+              value={state.details.pincode}
+              error={state.detailsErrors.pincode}
+              onChange={(value) => dispatch({ type: 'set_details', details: { pincode: value } })}
+              autoComplete="postal-code"
+            />
+            <Field
+              lang={lang}
+              fields={formFields}
+              fieldKey="email"
+              type="email"
+              value={state.details.email}
+              error={state.detailsErrors.email}
+              onChange={(value) => dispatch({ type: 'set_details', details: { email: value } })}
+              autoComplete="email"
+            />
             <Field
               lang={lang}
               fields={formFields}
@@ -756,12 +473,9 @@ export function CampaignFlow({
               onChange={(value) => dispatch({ type: 'set_details', details: { addressLine: value } })}
               multiline
             />
-          ) : null}
-
-          {isFieldEnabled(formFields, 'district') && !privacyOn ? (
-            <label htmlFor="district" className={labelClass}>
-              {labelForField(formFields, 'district', lang, t(lang, 'district'))}
-              {!isFieldRequired(formFields, 'district') ? (
+            {isFieldEnabled(formFields, 'custom_message') ? (
+              <label className={labelClass}>
+                {fieldByKey(formFields, 'custom_message')?.[lang === 'en' ? 'label_en' : 'label_ml'] || t(lang, 'customText')}
                 <span className="font-normal text-muted"> ({t(lang, 'optional')})</span>
                 <textarea
                   className={`${inputClass} min-h-28 py-2`}
@@ -785,26 +499,94 @@ export function CampaignFlow({
               <IconChevronRight className="size-4 shrink-0" />
             </button>
           </div>
-          {pasteHint ? <p className="text-sm text-ink">{t(lang, 'pasteHint')}</p> : null}
-          {copyState === 'failed' ? <p className="text-sm text-red-800">{t(lang, 'copyFailed')}</p> : null}
-        </form>
+        </section>
+      ) : null}
+
+      {state.step === 4 && state.letter ? (
+        <ReviewStep
+          campaign={campaign}
+          selected={selected}
+          details={state.details}
+          letter={state.letter}
+          mode={mode}
+          onBack={() => dispatch({ type: 'goto', step: 3 })}
+          onContinue={() => dispatch({ type: 'goto', step: 5 })}
+        />
+      ) : null}
+
+      {state.step === 5 && state.letter ? (
+        <EmailStep
+          campaign={campaign}
+          details={state.details}
+          letter={state.letter}
+          mode={mode}
+          submissionId={state.submissionId}
+          onBack={() => dispatch({ type: 'goto', step: 4 })}
+        />
       ) : null}
     </PageContainer>
   )
 }
 
 function Field({
-  id,
-  label,
+  lang,
+  fields,
+  fieldKey,
   value,
-  onChange,
   error,
-  required,
+  onChange,
   type = 'text',
   multiline,
+  hint,
   autoComplete,
   inputMode,
-  voice,
+}: {
+  lang: Lang
+  fields: CampaignFormField[]
+  fieldKey: Parameters<typeof isFieldEnabled>[1]
+  value: string
+  error?: string
+  onChange: (value: string) => void
+  type?: string
+  multiline?: boolean
+  hint?: string
+  autoComplete?: string
+  inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode']
+}) {
+  if (!isFieldEnabled(fields, fieldKey)) return null
+  const field = fieldByKey(fields, fieldKey)
+  const label = (lang === 'en' ? field?.label_en : field?.label_ml) || fieldKey
+  const required = isFieldRequired(fields, fieldKey)
+  return (
+    <label className={labelClass}>
+      {label}
+      {!required ? <span className="font-normal text-muted"> ({t(lang, 'optional')})</span> : null}
+      {multiline ? (
+        <textarea className={`${inputClass} min-h-24 py-2`} value={value} onChange={(event) => onChange(event.target.value)} />
+      ) : (
+        <input
+          type={type}
+          inputMode={inputMode}
+          className={inputClass}
+          value={value}
+          autoComplete={autoComplete}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      )}
+      {hint ? <span className="mt-1 block text-sm font-normal text-muted">{hint}</span> : null}
+      {error ? <p className="mt-1 text-sm font-normal text-red-800">{error}</p> : null}
+    </label>
+  )
+}
+
+function ReviewStep({
+  campaign,
+  selected,
+  details,
+  letter,
+  mode,
+  onBack,
+  onContinue,
 }: {
   campaign: Campaign
   selected: ObjectionClause[]
@@ -878,6 +660,64 @@ function EmailStep({
   onBack: () => void
 }) {
   const { lang } = useLang()
+  const router = useRouter()
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle')
+  const [emlHint, setEmlHint] = useState(false)
+  const dryRun = isDryRun(mode)
+  const targets = useMemo(
+    () => resolveMailTargets({ campaign, mode, testerEmail: details.email }),
+    [campaign, mode, details.email],
+  )
+  const mailParams: MailComposeParams = {
+    to: targets.to,
+    cc: targets.cc,
+    bcc: targets.bcc,
+    subject: letter.subject,
+    body: letter.body,
+  }
+  const sendDisabled = !details.fullName.trim() || mailParams.to.length === 0
+
+  async function recordHandoff(method: 'gmail_web' | 'mailto' | 'copy', goSent: boolean) {
+    if (!submissionId) return
+    await markHandoff(submissionId, method)
+    if (goSent) router.push(`/sent?id=${submissionId}`)
+  }
+
+  async function copyPlainText(text: string) {
+    try {
+      await navigator.clipboard.writeText(text)
+    } catch {
+      const field = document.createElement('textarea')
+      field.value = text
+      field.setAttribute('readonly', '')
+      field.style.position = 'fixed'
+      field.style.opacity = '0'
+      document.body.appendChild(field)
+      field.select()
+      const ok = document.execCommand('copy')
+      document.body.removeChild(field)
+      if (!ok) throw new Error('copy failed')
+    }
+  }
+
+  function openGmail() {
+    setEmlHint(false)
+    const plan = planGmailHandoff(
+      mailParams,
+      clientPlatform(navigator.userAgent, navigator.maxTouchPoints),
+      navigator.userAgent,
+    )
+    applyGmailHandoff(plan)
+    void recordHandoff('gmail_web', plan.openInNewTab && plan.includeBody)
+  }
+
+  function openMailApp() {
+    setEmlHint(false)
+    const result = launchMailCompose(mailParams, 'mail_app')
+    setEmlHint(result === 'eml')
+    void recordHandoff('mailto', false)
+  }
+
   return (
     <section>
       <h1 className="font-display text-2xl text-ink sm:text-3xl">{t(lang, 'sendEmail')}</h1>
