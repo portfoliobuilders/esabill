@@ -5,7 +5,6 @@ import { cookies } from 'next/headers'
 
 import { statusFromLegacy } from '@/lib/campaign-status'
 import { normalizeConcernSelectionMode } from '@/lib/concern-selection'
-import { daysRemaining } from '@/lib/deadline'
 import { defaultBodyTemplate } from '@/lib/email-template'
 import { PREVIEW_COOKIE } from '@/lib/preview-cookie'
 import { createAnonServerClient } from '@/lib/supabase/anon-server'

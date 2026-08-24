@@ -13,6 +13,8 @@ export type RepLevel = 'mla' | 'mp_lok_sabha' | 'mp_rajya_sabha' | 'minister' | 
 /** Legacy publish_status values kept in sync with `status`. */
 export type PublishStatus = 'draft' | 'preview' | 'live' | 'closed' | 'archived'
 
+export type ConcernSelectionMode = 'single' | 'multiple'
+
 export type CampaignStatus = 'draft' | 'active' | 'inactive' | 'expired' | 'archived'
 
 export type RecipientType = 'to' | 'cc' | 'bcc'

@@ -23,8 +23,6 @@ import { DEFAULT_BODY_TEMPLATE_EN, DEFAULT_BODY_TEMPLATE_ML } from '@/lib/email-
 import { DEFAULT_FEATURE_SETTINGS, parseFeatureSettings } from '@/lib/campaign-features'
 import { improveCampaignConcern } from '@/lib/ai/improve'
 import { DEFAULT_FORM_FIELDS } from '@/lib/form-fields'
-import { parseFeatureSettings } from '@/lib/campaign-features'
-import { improveCampaignConcern } from '@/lib/ai/improve'
 import { invalidEmails, parseEmailList, rowsFromLists } from '@/lib/recipients'
 import { createServiceClient } from '@/lib/supabase/server'
 
@@ -245,7 +243,6 @@ export type StudioSaveInput = {
   to_emails: string[]
   cc_emails: string[]
   bcc_emails: string[]
-  feature_settings?: Record<string, unknown>
   form_fields: Array<{
     field_key: string
     label_en: string
@@ -327,7 +324,6 @@ export async function saveCampaignStudio(input: StudioSaveInput): Promise<Action
     recipient_email: to[0] ?? (before.recipient_email as string),
     cc_emails: cc,
     bcc_emails: bcc,
-    feature_settings: parseFeatureSettings(input.feature_settings),
     updated_by: session.email,
   }
 
@@ -991,25 +987,3 @@ export async function reorderCampaignSources(campaignId: string, ids: string[]):
   return { ok: true }
 }
 
-export async function generateAiConcernDraft(
-  campaignId: string,
-  concernId: string,
-  language: 'ml' | 'en',
-): Promise<ActionResult & { body?: string }> {
-  await requireAdminSession()
-  const result = await improveCampaignConcern({
-    campaignId,
-    concernId,
-    language,
-    forceLive: true,
-  })
-  if (!result.ok) return { ok: false, error: 'AI draft is unavailable. The original concern is unchanged.' }
-  const supabase = createServiceClient()
-  const patch =
-    language === 'en'
-      ? { ai_body_en: result.body, ai_body_en_status: 'draft' }
-      : { ai_body_ml: result.body, ai_body_ml_status: 'draft' }
-  await supabase.from('objection_clauses').update(patch).eq('id', concernId)
-  revalidateAfterCmsSave()
-  return { ok: true, id: concernId, body: result.body }
-}

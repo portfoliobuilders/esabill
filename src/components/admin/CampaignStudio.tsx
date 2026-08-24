@@ -16,14 +16,14 @@ import { AdminPageHeader, ConfirmDialog, ErrorState, SaveStatus, SuccessBanner }
 import { CampaignFeaturesPanel } from '@/components/admin/CampaignFeaturesPanel'
 import { CampaignSourcesEditor } from '@/components/admin/CampaignSourcesEditor'
 import { adminBtnDanger, adminBtnPrimary, adminBtnSecondary, adminInput, adminLabel } from '@/components/admin/admin-ui'
-import { CampaignFeaturesPanel } from '@/components/admin/CampaignFeaturesPanel'
 import { ConcernSelectionSettings, draftFromCampaign, type ConcernSelectionDraft } from '@/components/admin/ConcernSelectionSettings'
 import { formatDatetimeLocal } from '@/lib/admin/format'
 import { CAMPAIGN_STATUS_LABEL, type CampaignStatus } from '@/lib/campaign-status'
 import { parseFeatureSettings, type CampaignFeatureSettings } from '@/lib/campaign-features'
 import { applyFieldMode, DEFAULT_FORM_FIELDS, type FieldMode } from '@/lib/form-fields'
 import { recipientsOfType } from '@/lib/recipients'
-import type { Campaign, CampaignFormField, CampaignRecipient, CampaignSource, ConcernSelectionMode, ObjectionClause } from '@/types/database'
+import type { ConcernSelectionMode } from '@/lib/concern-selection'
+import type { Campaign, CampaignFormField, CampaignRecipient, CampaignSource, ObjectionClause } from '@/types/database'
 
 const TABS = [
   'Basic Details',
