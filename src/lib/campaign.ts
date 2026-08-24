@@ -5,6 +5,7 @@ import { cookies } from 'next/headers'
 
 import { statusFromLegacy } from '@/lib/campaign-status'
 import { normalizeConcernSelectionMode } from '@/lib/concern-selection'
+import { daysRemaining } from '@/lib/deadline'
 import { defaultBodyTemplate } from '@/lib/email-template'
 import { PREVIEW_COOKIE } from '@/lib/preview-cookie'
 import { createAnonServerClient } from '@/lib/supabase/anon-server'
@@ -83,13 +84,6 @@ export async function readPreviewToken(searchParam?: string | null): Promise<str
   if (fromQuery) return fromQuery
   const store = await cookies()
   return store.get(PREVIEW_COOKIE)?.value?.trim() || null
-}
-
-export function daysRemaining(deadlineAt: string | null | undefined, now = new Date()): number | null {
-  if (!deadlineAt) return null
-  const ms = new Date(deadlineAt).getTime() - now.getTime()
-  if (Number.isNaN(ms)) return null
-  return Math.max(0, Math.ceil(ms / 86_400_000))
 }
 
 function viewFromRow(row: CampaignRow, previewToken: string | null | undefined, now = new Date()): CampaignState {

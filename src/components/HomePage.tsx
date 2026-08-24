@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 
 import { NotifySignup } from '@/components/NotifySignup'
@@ -7,6 +8,7 @@ import { IconClock, IconList, IconPencil, IconPeople, IconPerson, IconPlane } fr
 import { PageContainer } from '@/components/ui/PageContainer'
 import { useLang } from '@/components/LanguageProvider'
 import { cx } from '@/lib/cx'
+import { daysRemaining } from '@/lib/deadline'
 import { formatCampaignDate } from '@/lib/format-date'
 import { t, tReplace } from '@/lib/i18n'
 import { btnPrimary } from '@/lib/ui'
@@ -21,15 +23,25 @@ const howSteps = [
 export function HomePage({
   mode,
   campaign,
-  daysLeft,
   confirmedCount,
 }: {
   mode: 'live' | 'preview' | 'dormant'
   campaign: Campaign | null
-  daysLeft: number
   confirmedCount: number
 }) {
   const { lang } = useLang()
+  const [daysLeft, setDaysLeft] = useState(() => daysRemaining(campaign?.deadline_at))
+
+  useEffect(() => {
+    setDaysLeft(daysRemaining(campaign?.deadline_at))
+    if (!campaign?.deadline_at) return
+
+    const timer = window.setInterval(() => {
+      setDaysLeft(daysRemaining(campaign.deadline_at))
+    }, 60_000)
+
+    return () => window.clearInterval(timer)
+  }, [campaign?.deadline_at])
 
   if (!campaign) {
     return (
@@ -77,7 +89,7 @@ export function HomePage({
                 {isClosed ? t(lang, 'publicCommentsClosedOn') : t(lang, 'publicCommentsCloseOn')}
               </p>
               <p className="mt-1 font-mono text-2xl text-ink sm:text-3xl">{deadlineDate}</p>
-              {isLive && !isClosed ? (
+              {isLive && !isClosed && daysLeft !== null ? (
                 <p className="mt-2 text-sm font-semibold text-accent">
                   {tReplace(lang, 'daysRemaining', { n: String(daysLeft) })}
                 </p>
