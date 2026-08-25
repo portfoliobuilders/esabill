@@ -82,14 +82,12 @@ export function createDetailsSchema(
     : optionalText()
 
   const pinEnabled = isFieldEnabled(fields, 'pincode')
-  const pinRequired = pinEnabled && (needIdentity || isFieldRequired(fields, 'pincode')) && !privacy
+  // PIN is optional. Lookup may fill location later, but an empty PIN must not block send.
   const pincode = pinEnabled
-    ? pinRequired
-      ? z.string().trim().regex(PINCODE_RE, t(lang, 'errorPincode'))
-      : z
-          .string()
-          .trim()
-          .refine((value) => !value || PINCODE_RE.test(value), t(lang, 'errorPincode'))
+    ? z
+        .string()
+        .trim()
+        .refine((value) => !value || PINCODE_RE.test(value), t(lang, 'errorPincode'))
     : optionalText()
 
   const districtEnabled = isFieldEnabled(fields, 'district')
@@ -105,7 +103,7 @@ export function createDetailsSchema(
           .string()
           .trim()
           .refine((value) => !value || districts.length === 0 || districts.includes(value), t(lang, 'errorDistrict'))
-    : optionalText
+    : optionalText()
 
   const address = isFieldRequired(fields, 'address') && !privacy ? requiredText(t(lang, 'errorAddress')) : optionalText()
   const panchayat = isFieldRequired(fields, 'local_body') && !privacy ? requiredText(t(lang, 'panchayat')) : optionalText()

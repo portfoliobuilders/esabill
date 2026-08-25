@@ -21,40 +21,52 @@ function line(label: string, value: string | undefined | null): string | null {
   return `${label}: ${text}`
 }
 
-export function identityBlock(details: IdentityDetails, lang: Lang): string {
-  const labels =
-    lang === 'en'
-      ? {
-          name: 'Name',
-          pincode: 'PIN Code',
-          postOffice: 'Post Office',
-          district: 'District',
-          state: 'State',
-          region: 'Postal Region',
-          taluk: 'Taluk',
-          phone: 'Phone Number',
-          address: 'Address',
-        }
-      : {
-          name: 'പേര്',
-          pincode: 'പിൻ കോഡ്',
-          postOffice: 'പോസ്റ്റ് ഓഫീസ്',
-          district: 'ജില്ല',
-          state: 'സംസ്ഥാനം',
-          region: 'തപാൽ മേഖല',
-          taluk: 'താലൂക്ക്',
-          phone: 'ഫോൺ നമ്പർ',
-          address: 'വിലാസം',
-        }
+function identityLabels(lang: Lang) {
+  return lang === 'en'
+    ? {
+        name: 'Name',
+        pincode: 'PIN Code',
+        postOffice: 'Post Office',
+        district: 'District',
+        state: 'State',
+        region: 'Postal Region',
+        taluk: 'Taluk',
+        phone: 'Phone Number',
+        address: 'Address',
+      }
+    : {
+        name: 'പേര്',
+        pincode: 'പിൻ കോഡ്',
+        postOffice: 'പോസ്റ്റ് ഓഫീസ്',
+        district: 'ജില്ല',
+        state: 'സംസ്ഥാനം',
+        region: 'തപാൽ മേഖല',
+        taluk: 'താലൂക്ക്',
+        phone: 'ഫോൺ നമ്പർ',
+        address: 'വിലാസം',
+      }
+}
 
+/** PIN and the office/district/state/region/taluk returned by live lookup. */
+export function locationBlock(details: IdentityDetails, lang: Lang): string {
+  const labels = identityLabels(lang)
   return [
-    line(labels.name, details.fullName),
     line(labels.pincode, details.pincode),
     line(labels.postOffice, details.postOffice),
     line(labels.district, details.district),
     line(labels.state, details.state),
     line(labels.region, details.postalRegion),
     line(labels.taluk, details.taluk),
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
+
+export function identityBlock(details: IdentityDetails, lang: Lang): string {
+  const labels = identityLabels(lang)
+  return [
+    line(labels.name, details.fullName),
+    locationBlock(details, lang),
     line(labels.phone, details.phone),
     line(labels.address, details.addressLine),
   ]
