@@ -1,8 +1,8 @@
 import { concernTitle } from '@/lib/compose-concerns'
 import { uniqueEmails } from '@/lib/compose-emails'
-import { identityBlock, privacyLetter } from '@/lib/compose-identity'
+import { identityBlock, locationBlock, privacyLetter } from '@/lib/compose-identity'
 import { campaignConcernConfig, formatConcernsForEmail, selectedClausesForLetter } from '@/lib/concern-selection'
-import { defaultBodyTemplate, renderSafeTemplate, type EmailTemplateValues } from '@/lib/email-template'
+import { collapseBlankLines, defaultBodyTemplate, renderSafeTemplate, type EmailTemplateValues } from '@/lib/email-template'
 import type { Lang } from '@/lib/i18n'
 import type { WizardMode } from '@/lib/wizard-mode'
 import type { Campaign, ObjectionClause } from '@/types/database'
@@ -144,6 +144,20 @@ export function clausesForLetter(clauses: ObjectionClause[], selectedIds: string
   return selectedClausesForLetter(clauses, selectedIds)
 }
 
+function identityFromDetails(details: ComposeDetails) {
+  return {
+    fullName: details.fullName,
+    pincode: details.pincode,
+    phone: details.phone,
+    addressLine: details.addressLine,
+    postOffice: details.postOffice,
+    district: details.district,
+    state: details.state,
+    postalRegion: details.postalRegion,
+    taluk: details.taluk,
+  }
+}
+
 function senderValues(
   details: ComposeDetails,
   lang: Lang,
@@ -163,6 +177,7 @@ function senderValues(
   | 'state'
   | 'postal_region'
   | 'identity_block'
+  | 'location_block'
 > {
   return {
     full_name: details.fullName,
@@ -178,21 +193,18 @@ function senderValues(
     post_office: details.postOffice ?? '',
     state: details.state ?? '',
     postal_region: details.postalRegion ?? '',
-    identity_block: identityBlock(
-      {
-        fullName: details.fullName,
-        pincode: details.pincode,
-        phone: details.phone,
-        addressLine: details.addressLine,
-        postOffice: details.postOffice,
-        district: details.district,
-        state: details.state,
-        postalRegion: details.postalRegion,
-        taluk: details.taluk,
-      },
-      lang,
-    ),
+    identity_block: identityBlock(identityFromDetails(details), lang),
+    location_block: locationBlock(identityFromDetails(details), lang),
   }
+}
+
+function withEnteredPinLocation(body: string, details: ComposeDetails, lang: Lang): string {
+  const pin = details.pincode.trim()
+  if (!pin || details.privacyMode) return body
+  if (body.includes(pin)) return body
+  const block = locationBlock(identityFromDetails({ ...details, pincode: pin }), lang)
+  if (!block) return body
+  return collapseBlankLines(`${body}\n\n${block}`)
 }
 
 export function composeSubject(campaign: Campaign, clauses: ObjectionClause[], lang: Lang): string {
@@ -237,7 +249,7 @@ function assembleBody(
     }),
     ...senderValues(details, lang),
   }
-  return renderSafeTemplate(template, values)
+  return withEnteredPinLocation(renderSafeTemplate(template, values), details, lang)
 }
 
 export function composeEmail({ campaign, clauses, details, lang }: ComposeEmailInput): ComposeEmailResult {

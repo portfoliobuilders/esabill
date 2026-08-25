@@ -30,7 +30,7 @@ const optionalEmail = z.union([z.literal(''), z.email()])
 const letterInputSchema = z.object({
   campaignSlug: z.string().min(1),
   fullName: z.string().trim().optional().default(''),
-  email: optionalEmail.optional().default(''),
+  email: z.string().trim().optional().default(''),
   phone: z.string().trim().optional().default(''),
   address: z.string().trim().optional().default(''),
   panchayat: z.string().trim().optional().default(''),

@@ -16,6 +16,7 @@ export const EMAIL_PLACEHOLDERS = [
   'state',
   'postal_region',
   'identity_block',
+  'location_block',
 ] as const
 
 export type EmailPlaceholder = (typeof EMAIL_PLACEHOLDERS)[number]
@@ -78,6 +79,7 @@ export function emptyTemplateValues(): EmailTemplateValues {
     state: '',
     postal_region: '',
     identity_block: '',
+    location_block: '',
   }
 }
 

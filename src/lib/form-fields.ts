@@ -1,7 +1,5 @@
 import type { CampaignFormField, FormFieldKey } from '@/types/database'
 
-export type FieldMode = 'disabled' | 'optional' | 'required'
-
 export const FORM_FIELD_KEYS: FormFieldKey[] = [
   'name',
   'pincode',
@@ -16,7 +14,7 @@ export const FORM_FIELD_KEYS: FormFieldKey[] = [
 
 export const DEFAULT_FORM_FIELDS: Array<Omit<CampaignFormField, 'id' | 'campaign_id'>> = [
   { field_key: 'name', label_en: 'Name', label_ml: 'പേര്', is_enabled: true, is_required: true, display_order: 1 },
-  { field_key: 'pincode', label_en: 'PIN Code', label_ml: 'പിൻ കോഡ്', is_enabled: true, is_required: true, display_order: 2 },
+  { field_key: 'pincode', label_en: 'PIN Code', label_ml: 'പിൻ കോഡ്', is_enabled: true, is_required: false, display_order: 2 },
   { field_key: 'phone', label_en: 'Phone Number', label_ml: 'ഫോൺ നമ്പർ', is_enabled: false, is_required: false, display_order: 3 },
   { field_key: 'address', label_en: 'Address', label_ml: 'വിലാസം', is_enabled: false, is_required: false, display_order: 4 },
   { field_key: 'email', label_en: 'Email', label_ml: 'ഇമെയിൽ', is_enabled: false, is_required: false, display_order: 5 },
@@ -56,8 +54,10 @@ export function isFieldEnabled(fields: CampaignFormField[], key: FormFieldKey): 
 }
 
 export function isFieldRequired(fields: CampaignFormField[], key: FormFieldKey): boolean {
+  // PIN may fill location later, but it is never required to send.
+  if (key === 'pincode') return false
   const field = fieldByKey(fields, key)
-  if (!field) return key === 'name' || key === 'pincode'
+  if (!field) return key === 'name'
   if (!field.is_enabled) return false
   return field.is_required
 }
