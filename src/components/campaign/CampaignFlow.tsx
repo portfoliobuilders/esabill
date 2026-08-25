@@ -96,7 +96,7 @@ export function CampaignFlow({
   campaign: Campaign
   clauses: ObjectionClause[]
   formFields: CampaignFormField[]
-  districts: DistrictOption[]
+  districts: { value: string; labelEn: string; labelMl: string }[]
   mode: WizardMode
   view: 'live' | 'preview' | 'inactive' | 'expired'
   sources?: CampaignSource[]
@@ -570,21 +570,16 @@ export function CampaignFlow({
             <div>
               <label htmlFor="pincode" className={labelClass}>
                 {labelForField(formFields, 'pincode', lang, t(lang, 'pincode'))}
-                {isFieldRequired(formFields, 'pincode') ? (
-                  <span className="text-accent"> *</span>
-                ) : (
-                  <span className="font-normal text-muted"> ({t(lang, 'optional')})</span>
-                )}
+                <span className="font-normal text-muted"> ({t(lang, 'optional')})</span>
               </label>
               <input
                 id="pincode"
                 inputMode="numeric"
                 autoComplete="postal-code"
-                pattern="[1-9][0-9]{5}"
                 maxLength={6}
                 className={inputClass}
                 value={details.pincode}
-                aria-required={isFieldRequired(formFields, 'pincode')}
+                aria-required={false}
                 aria-invalid={Boolean(errors.pincode)}
                 aria-describedby={errors.pincode ? 'pincode-error' : lookupState !== 'idle' ? 'pincode-status' : undefined}
                 onChange={(event) => patchDetails({ pincode: event.target.value.replace(/\D/g, '').slice(0, 6) })}
@@ -901,7 +896,7 @@ export function NoActiveCampaign() {
       <div className="flex justify-end">
         <LanguageToggle />
       </div>
-      <h1 className="font-display mt-6 text-2xl text-ink sm:text-3xl">{t(lang, 'noActiveCampaignTitle')}</h1>
+      <h1 className="font-display mt-6 text-2xl text-ink sm:text-3xl">{t(lang, 'noLiveTitle')}</h1>
       <p className="mt-4 max-w-2xl text-base leading-relaxed text-body sm:text-lg">{t(lang, 'noActiveCampaign')}</p>
     </PageContainer>
   )

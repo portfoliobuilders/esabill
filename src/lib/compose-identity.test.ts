@@ -2,8 +2,8 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { composeEmail } from './compose'
-import { identityBlock, privacyLetter } from './compose-identity'
-import { fixtureCampaign as demoCampaign, fixtureClauses as demoClauses } from './campaign-fixtures'
+import { identityBlock, locationBlock, privacyLetter } from './compose-identity'
+import { fixtureCampaign, fixtureClauses } from './campaign-fixtures'
 
 const identityDetails = {
   fullName: 'Joseph Mathew',
@@ -82,6 +82,75 @@ test('compose with privacyMode drops name, PIN, and office from the email', () =
   assert.doesNotMatch(result.body, /Post Office: Adimali/)
   assert.doesNotMatch(result.body, /Hill Road/)
   assert.doesNotMatch(result.body, /9876543210/)
+})
+
+test('location block is only PIN and fetched postal fields', () => {
+  assert.equal(
+    locationBlock(identityDetails, 'en'),
+    [
+      'PIN Code: 685531',
+      'Post Office: Adimali',
+      'District: Idukki',
+      'State: Kerala',
+      'Postal Region: Kochi',
+      'Taluk: Devikulam',
+    ].join('\n'),
+  )
+  assert.doesNotMatch(locationBlock(identityDetails, 'en'), /Joseph/)
+})
+
+test('fetched PIN location is added when the campaign template omitted it', () => {
+  const result = composeEmail({
+    campaign: {
+      ...fixtureCampaign,
+      body_template_en: '{{intro}}\n\n{{concerns}}\n\n{{closing}}\n\nRegards,\n{{full_name}}',
+    },
+    clauses: [fixtureClauses[0]],
+    details: {
+      fullName: 'Joseph Mathew',
+      addressLine: '',
+      panchayat: '',
+      district: 'Idukki',
+      pincode: '685561',
+      phone: '',
+      email: '',
+      postOffice: 'Adimali',
+      state: 'Kerala',
+      postalRegion: 'Kochi',
+      taluk: 'Devikulam',
+    },
+    lang: 'en',
+  })
+  assert.match(result.body, /Regards,\nJoseph Mathew/)
+  assert.match(result.body, /PIN Code: 685561/)
+  assert.match(result.body, /Post Office: Adimali/)
+  assert.match(result.body, /District: Idukki/)
+  assert.match(result.body, /State: Kerala/)
+  assert.match(result.body, /Postal Region: Kochi/)
+  assert.match(result.body, /Taluk: Devikulam/)
+})
+
+test('empty PIN does not add a location block', () => {
+  const result = composeEmail({
+    campaign: {
+      ...fixtureCampaign,
+      body_template_en: '{{intro}}\n\n{{concerns}}\n\nRegards,\n{{full_name}}',
+    },
+    clauses: [fixtureClauses[0]],
+    details: {
+      fullName: 'Joseph Mathew',
+      addressLine: '',
+      panchayat: '',
+      district: '',
+      pincode: '',
+      phone: '',
+      email: '',
+    },
+    lang: 'en',
+  })
+  assert.match(result.body, /Regards,\nJoseph Mathew/)
+  assert.doesNotMatch(result.body, /PIN Code/)
+  assert.doesNotMatch(result.body, /Post Office/)
 })
 
 test('identified compose includes resolved location via identity_block', () => {
