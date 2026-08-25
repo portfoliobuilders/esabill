@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { composeEmail } from './compose'
-import { identityBlock, locationBlock, privacyLetter } from './compose-identity'
+import { identityBlock, privacyLetter } from './compose-identity'
 import { fixtureCampaign, fixtureClauses } from './campaign-fixtures'
 
 const identityDetails = {

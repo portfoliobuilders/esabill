@@ -25,6 +25,7 @@ const uuidSchema = z.uuid()
 const langSchema = z.enum(['ml', 'en'])
 const sendMethodSchema = z.enum(['gmail_web', 'mailto', 'copy', 'server', 'print'])
 const letterModeSchema = z.enum(['selected', 'all'])
+const optionalEmail = z.union([z.literal(''), z.email()])
 
 const letterInputSchema = z.object({
   campaignSlug: z.string().min(1),

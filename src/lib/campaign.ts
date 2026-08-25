@@ -85,13 +85,6 @@ export async function readPreviewToken(searchParam?: string | null): Promise<str
   return store.get(PREVIEW_COOKIE)?.value?.trim() || null
 }
 
-export function daysRemaining(deadlineAt: string | null | undefined, now = new Date()): number | null {
-  if (!deadlineAt) return null
-  const ms = new Date(deadlineAt).getTime() - now.getTime()
-  if (Number.isNaN(ms)) return null
-  return Math.max(0, Math.ceil(ms / 86_400_000))
-}
-
 function viewFromRow(row: CampaignRow, previewToken: string | null | undefined, now = new Date()): CampaignState {
   const campaign = publicCampaign(row)
   if (tokensMatch(row.preview_token, previewToken) && campaign.status !== 'active') {

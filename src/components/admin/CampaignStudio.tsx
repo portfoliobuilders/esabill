@@ -22,7 +22,8 @@ import { CAMPAIGN_STATUS_LABEL, type CampaignStatus } from '@/lib/campaign-statu
 import { parseFeatureSettings, type CampaignFeatureSettings } from '@/lib/campaign-features'
 import { applyFieldMode, DEFAULT_FORM_FIELDS, type FieldMode } from '@/lib/form-fields'
 import { recipientsOfType } from '@/lib/recipients'
-import type { Campaign, CampaignFormField, CampaignRecipient, CampaignSource, ConcernSelectionMode, ObjectionClause } from '@/types/database'
+import type { ConcernSelectionMode } from '@/lib/concern-selection'
+import type { Campaign, CampaignFormField, CampaignRecipient, CampaignSource, ObjectionClause } from '@/types/database'
 
 const TABS = [
   'Basic Details',
