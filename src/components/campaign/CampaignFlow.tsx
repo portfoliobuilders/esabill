@@ -129,6 +129,7 @@ export function CampaignFlow({
   const [emlHint, setEmlHint] = useState(false)
   const [status, setStatus] = useState('')
   const [submissionId, setSubmissionId] = useState<string | null>(null)
+  const [daysLeft, setDaysLeft] = useState(() => daysRemaining(campaign.deadline_at))
   const abortRef = useRef<AbortController | null>(null)
   const aiAbort = useRef<AbortController | null>(null)
 
@@ -221,11 +222,6 @@ export function CampaignFlow({
     return () => controller.abort()
   }, [details.pincode, features.enable_pin_lookup, lang, privacyOn])
 
-  const title = pick(lang, campaign.title_ml, campaign.title_en)
-  const description = pick(lang, campaign.homepage_intro_ml || campaign.summary_ml, campaign.homepage_intro_en || campaign.summary_en)
-  const deadline = formatCampaignDate(campaign.deadline_at, lang)
-  const [daysLeft, setDaysLeft] = useState(() => daysRemaining(campaign.deadline_at))
-
   useEffect(() => {
     setDaysLeft(daysRemaining(campaign.deadline_at))
     if (!campaign.deadline_at) return
@@ -234,6 +230,10 @@ export function CampaignFlow({
     }, 60_000)
     return () => window.clearInterval(timer)
   }, [campaign.deadline_at])
+
+  const title = pick(lang, campaign.title_ml, campaign.title_en)
+  const description = pick(lang, campaign.homepage_intro_ml || campaign.summary_ml, campaign.homepage_intro_en || campaign.summary_en)
+  const deadline = formatCampaignDate(campaign.deadline_at, lang)
 
   const showAi =
     features.enable_ai_mail &&
