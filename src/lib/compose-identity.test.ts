@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { composeEmail } from './compose'
-import { identityBlock, privacyLetter } from './compose-identity'
+import { identityBlock, locationBlock, privacyLetter } from './compose-identity'
 import { fixtureCampaign, fixtureClauses } from './campaign-fixtures'
 
 const identityDetails = {
@@ -37,15 +37,15 @@ test('identity block omits empty lines', () => {
 
 test('privacy letter contains campaign and concern, not personal location', () => {
   const body = privacyLetter({
-    campaign: demoCampaign,
-    clauses: [demoClauses[0]],
+    campaign: fixtureCampaign,
+    clauses: [fixtureClauses[0]],
     extraConcerns: ['Keep the river accessible'],
     lang: 'en',
   })
   assert.match(body, /Dear Sir\/Madam/)
   assert.match(body, /A concerned citizen/)
   assert.match(body, /Keep the river accessible/)
-  assert.match(body, new RegExp(demoClauses[0].title_en))
+  assert.match(body, new RegExp(fixtureClauses[0].title_en))
   assert.doesNotMatch(body, /Joseph/)
   assert.doesNotMatch(body, /685531/)
   assert.doesNotMatch(body, /Adimali/)
@@ -55,10 +55,10 @@ test('privacy letter contains campaign and concern, not personal location', () =
 test('compose with privacyMode drops name, PIN, and office from the email', () => {
   const result = composeEmail({
     campaign: {
-      ...demoCampaign,
+      ...fixtureCampaign,
       body_template_en: '{{intro}}\n\n{{concerns}}\n\n{{identity_block}}',
     },
-    clauses: [demoClauses[0]],
+    clauses: [fixtureClauses[0]],
     details: {
       fullName: 'Joseph Mathew',
       addressLine: 'Hill Road',
@@ -156,10 +156,10 @@ test('empty PIN does not add a location block', () => {
 test('identified compose includes resolved location via identity_block', () => {
   const result = composeEmail({
     campaign: {
-      ...demoCampaign,
+      ...fixtureCampaign,
       body_template_en: '{{concerns}}\n\n{{identity_block}}',
     },
-    clauses: [demoClauses[0]],
+    clauses: [fixtureClauses[0]],
     details: {
       fullName: 'Joseph Mathew',
       addressLine: '',

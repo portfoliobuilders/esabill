@@ -30,6 +30,7 @@ import {
 } from '@/lib/concern-selection'
 import { parseFeatureSettings } from '@/lib/campaign-features'
 import { cx } from '@/lib/cx'
+import { daysRemaining } from '@/lib/deadline'
 import {
   createDetailsSchema,
   emptyDetails,
@@ -223,9 +224,16 @@ export function CampaignFlow({
   const title = pick(lang, campaign.title_ml, campaign.title_en)
   const description = pick(lang, campaign.homepage_intro_ml || campaign.summary_ml, campaign.homepage_intro_en || campaign.summary_en)
   const deadline = formatCampaignDate(campaign.deadline_at, lang)
-  const daysLeft = campaign.deadline_at
-    ? Math.max(0, Math.ceil((new Date(campaign.deadline_at).getTime() - Date.now()) / 86_400_000))
-    : null
+  const [daysLeft, setDaysLeft] = useState(() => daysRemaining(campaign.deadline_at))
+
+  useEffect(() => {
+    setDaysLeft(daysRemaining(campaign.deadline_at))
+    if (!campaign.deadline_at) return
+    const timer = window.setInterval(() => {
+      setDaysLeft(daysRemaining(campaign.deadline_at))
+    }, 60_000)
+    return () => window.clearInterval(timer)
+  }, [campaign.deadline_at])
 
   const showAi =
     features.enable_ai_mail &&

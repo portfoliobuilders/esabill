@@ -369,23 +369,20 @@ export function formatUnsentEml(params: MailComposeParams): string {
   return crlf(`${headers.join('\n')}\n${params.body}\n`)
 }
 
-/** Chrome Android intent that puts the full Unicode body in EXTRA_TEXT instead of a mailto URL. */
+/**
+ * Chrome Android intent that opens an email app (SENDTO + mailto).
+ * ACTION_SEND is the share sheet and Chrome copies EXTRA_TEXT to the clipboard.
+ */
 export function androidSendIntent(
   params: MailComposeParams,
   options?: { gmailOnly?: boolean; fallbackUrl?: string },
 ): string {
-  const extras = ['action=android.intent.action.SEND', 'type=message/rfc822']
+  const rest = mailtoUrl(params).replace(/^mailto:/i, '')
+  const extras = ['scheme=mailto', 'action=android.intent.action.SENDTO']
   if (options?.gmailOnly) extras.push(`package=${GMAIL_ANDROID_PACKAGE}`)
-  extras.push(`S.android.intent.extra.EMAIL=${encodeURIComponent(toHeader(params.to))}`)
-  const cc = ccHeader(params.cc)
-  if (cc) extras.push(`S.android.intent.extra.CC=${encodeURIComponent(cc)}`)
-  const bcc = bccHeader(params.bcc)
-  if (bcc) extras.push(`S.android.intent.extra.BCC=${encodeURIComponent(bcc)}`)
-  extras.push(`S.android.intent.extra.SUBJECT=${encodeURIComponent(params.subject)}`)
-  extras.push(`S.android.intent.extra.TEXT=${encodeURIComponent(params.body)}`)
   if (options?.fallbackUrl) extras.push(`S.browser_fallback_url=${encodeURIComponent(options.fallbackUrl)}`)
   extras.push('end')
-  return `intent://send/#Intent;${extras.join(';')}`
+  return `intent://${rest}#Intent;${extras.join(';')}`
 }
 
 export function formatCompleteEmailCopy(params: MailComposeParams): string {
