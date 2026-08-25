@@ -140,7 +140,7 @@ export function formatConcernsForEmail(args: {
     const clause = selected[0]
     if (clause) {
       const { title, body } = pickClauseText(clause, args.lang)
-      parts.push(args.lang === 'en' ? 'Selected Concern:' : 'തിരഞ്ഞെടുത്ത വിഷയം:')
+      parts.push(args.lang === 'en' ? 'Concern:' : 'വിഷയം:')
       parts.push('')
       parts.push(title)
       if (body.trim()) {
