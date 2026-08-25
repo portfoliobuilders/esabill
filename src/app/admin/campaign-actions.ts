@@ -242,6 +242,7 @@ export type StudioSaveInput = {
   to_emails: string[]
   cc_emails: string[]
   bcc_emails: string[]
+  feature_settings?: Record<string, unknown>
   form_fields: Array<{
     field_key: string
     label_en: string
