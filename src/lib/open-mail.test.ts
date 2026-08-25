@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { formatUnsentEml, gmailComposeUrl, mailtoUrl } from './compose'
+import { androidSendIntent, formatUnsentEml, gmailComposeUrl, mailtoUrl } from './compose'
 import { clientMailPlatform, planMailLaunch } from './open-mail'
 
 const longMalayalam = 'മലയാളം കത്ത് '.repeat(400)
@@ -32,8 +32,11 @@ test('long letters still include the full body in mailto, Gmail, Android, and em
 })
 
 test('send never falls back to a body-less compose URL', () => {
-  assert.equal(planMailLaunch(params, 'gmail', 'android').kind, 'android_intent')
-  assert.equal(planMailLaunch(params, 'mail_app', 'android').kind, 'android_intent')
+  const longAndroid = planMailLaunch(params, 'mail_app', 'android')
+  assert.ok(longAndroid.kind === 'mailto_url' || longAndroid.kind === 'android_intent')
+  if (longAndroid.kind === 'android_intent') {
+    assert.equal(longAndroid.gmailOnly, false)
+  }
 
   const gmailPlan = planMailLaunch(params, 'gmail', 'other')
   assert.ok(gmailPlan.kind === 'gmail_url' || gmailPlan.kind === 'eml')
@@ -50,8 +53,20 @@ test('send never falls back to a body-less compose URL', () => {
   assert.equal(planMailLaunch(params, 'mail_app', 'other').kind, 'eml')
 })
 
+test('Android intent opens a mail app, not the share/copy sheet', () => {
+  const intent = androidSendIntent(params, { fallbackUrl: mailtoUrl(params) })
+  assert.match(intent, /^intent:\/\//)
+  assert.match(intent, /scheme=mailto/)
+  assert.match(intent, /action=android\.intent\.action\.SENDTO/)
+  assert.doesNotMatch(intent, /action=android\.intent\.action\.SEND;/)
+  assert.doesNotMatch(intent, /android\.intent\.extra\.TEXT/)
+  assert.ok(intent.includes(encodeURIComponent(params.body)))
+})
+
 test('short letters open Gmail and iOS mail with the body in the link', () => {
   const short = { ...params, body: 'Short letter body' }
   assert.equal(planMailLaunch(short, 'gmail', 'other').kind, 'gmail_url')
   assert.equal(planMailLaunch(short, 'mail_app', 'ios').kind, 'mailto_url')
+  assert.equal(planMailLaunch(short, 'mail_app', 'android').kind, 'mailto_url')
+  assert.equal(planMailLaunch(short, 'gmail', 'android').kind, 'mailto_url')
 })

@@ -168,7 +168,10 @@ const intent = androidSendIntent(
   { to: targets.to, cc: targets.cc, subject: full.subject, body: full.body },
   { gmailOnly: true, fallbackUrl: 'https://mail.google.com/mail/?view=cm&fs=1' },
 )
-assert.match(intent, /^intent:\/\/send\/#Intent;/)
+assert.match(intent, /^intent:\/\//)
+assert.match(intent, /scheme=mailto/)
+assert.match(intent, /action=android\.intent\.action\.SENDTO/)
+assert.doesNotMatch(intent, /action=android\.intent\.action\.SEND;/)
 assert.match(intent, /package=com\.google\.android\.gm/)
 assert.ok(intent.includes(encodeURIComponent(full.body)))
 assert.ok(intent.includes(encodeURIComponent(full.subject)))

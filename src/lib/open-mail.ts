@@ -31,6 +31,9 @@ export function clientMailPlatform(userAgent: string, maxTouchPoints = 0): MailP
 /**
  * Choose how to hand the full letter to a mail client.
  * The body is never dropped. If a compose URL cannot carry it, an unsent .eml draft is used.
+ *
+ * Android must use mailto (same as iPhone), not ACTION_SEND. Chrome treats ACTION_SEND
+ * with EXTRA_TEXT as a share/copy, which is why Send Email showed the clipboard overlay.
  */
 export function planMailLaunch(
   params: MailComposeParams,
@@ -38,6 +41,7 @@ export function planMailLaunch(
   platform: MailPlatform,
 ): MailLaunchPlan {
   if (platform === 'android') {
+    if (!mailtoUrlTooLong(params)) return { kind: 'mailto_url' }
     return { kind: 'android_intent', gmailOnly: client === 'gmail' }
   }
 
@@ -53,6 +57,16 @@ export function planMailLaunch(
   }
 
   return { kind: 'eml' }
+}
+
+/** User-gesture navigation that Android Chrome / WhatsApp WebView will hand to a mail app. */
+function navigateToComposeUrl(url: string): void {
+  const link = document.createElement('a')
+  link.href = url
+  link.rel = 'noopener'
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
 }
 
 export function openUnsentEml(params: MailComposeParams, filename = EML_FILENAME): void {
@@ -81,17 +95,19 @@ export function launchMailCompose(params: MailComposeParams, client: MailClient)
 
   switch (plan.kind) {
     case 'android_intent': {
-      window.location.href = androidSendIntent(params, {
-        gmailOnly: plan.gmailOnly,
-        fallbackUrl: fallbackComposeUrl(params, client),
-      })
+      navigateToComposeUrl(
+        androidSendIntent(params, {
+          gmailOnly: plan.gmailOnly,
+          fallbackUrl: fallbackComposeUrl(params, client),
+        }),
+      )
       return 'navigated'
     }
     case 'gmail_url':
       window.open(gmailComposeUrl(params), '_blank', 'noopener,noreferrer')
       return 'gmail_tab'
     case 'mailto_url':
-      window.location.href = mailtoUrl(params)
+      navigateToComposeUrl(mailtoUrl(params))
       return 'navigated'
     case 'eml':
       openUnsentEml(params)
