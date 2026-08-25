@@ -50,7 +50,11 @@ test('send never falls back to a body-less compose URL', () => {
     assert.ok(mailtoUrl(params).includes(encodeURIComponent(params.body)))
   }
 
-  assert.equal(planMailLaunch(params, 'mail_app', 'other').kind, 'eml')
+  const desktopPlan = planMailLaunch(params, 'mail_app', 'other')
+  assert.ok(desktopPlan.kind === 'mailto_url' || desktopPlan.kind === 'eml')
+  if (desktopPlan.kind === 'mailto_url') {
+    assert.ok(mailtoUrl(params).includes(encodeURIComponent(params.body)))
+  }
 })
 
 test('Android intent opens a mail app, not the share/copy sheet', () => {
@@ -69,4 +73,5 @@ test('short letters open Gmail and iOS mail with the body in the link', () => {
   assert.equal(planMailLaunch(short, 'mail_app', 'ios').kind, 'mailto_url')
   assert.equal(planMailLaunch(short, 'mail_app', 'android').kind, 'mailto_url')
   assert.equal(planMailLaunch(short, 'gmail', 'android').kind, 'mailto_url')
+  assert.equal(planMailLaunch(short, 'mail_app', 'other').kind, 'mailto_url')
 })

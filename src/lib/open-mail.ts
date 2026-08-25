@@ -47,15 +47,12 @@ export function planMailLaunch(
 
   if (client === 'gmail') {
     if (!gmailUrlTooLong(params)) return { kind: 'gmail_url' }
-    // Gmail's web URL cannot carry this letter. Keep the full body via mailto or an .eml draft.
-    if (platform === 'ios' && !mailtoUrlTooLong(params)) return { kind: 'mailto_url' }
+    if (!mailtoUrlTooLong(params)) return { kind: 'mailto_url' }
     return { kind: 'eml' }
   }
 
-  if (platform === 'ios' && !mailtoUrlTooLong(params)) {
-    return { kind: 'mailto_url' }
-  }
-
+  // iPhone, iPad, and desktop/laptop browsers. Android is handled above.
+  if (!mailtoUrlTooLong(params)) return { kind: 'mailto_url' }
   return { kind: 'eml' }
 }
 
@@ -106,9 +103,14 @@ export function launchMailCompose(params: MailComposeParams, client: MailClient)
     case 'gmail_url':
       window.open(gmailComposeUrl(params), '_blank', 'noopener,noreferrer')
       return 'gmail_tab'
-    case 'mailto_url':
-      navigateToComposeUrl(mailtoUrl(params))
+    case 'mailto_url': {
+      const href = mailtoUrl(params)
+      // Windows/macOS Chrome opens Outlook/Mail from location.href.
+      // Phones keep a tapped <a>, which WhatsApp WebView and iOS Safari honour.
+      if (platform === 'other') window.location.href = href
+      else navigateToComposeUrl(href)
       return 'navigated'
+    }
     case 'eml':
       openUnsentEml(params)
       return 'eml'
