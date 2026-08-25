@@ -226,7 +226,6 @@ export type StudioSaveInput = {
   custom_concern_label_ml?: string
   custom_concern_placeholder_en?: string
   custom_concern_placeholder_ml?: string
-  feature_settings?: Record<string, unknown>
   subject_en: string
   subject_ml: string
   intro_en: string

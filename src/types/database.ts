@@ -32,6 +32,8 @@ export type FormFieldKey =
 
 export type AiBodyStatus = 'none' | 'draft' | 'approved'
 
+export type ConcernSelectionMode = 'single' | 'multiple'
+
 export type Campaign = {
   id: string
   slug: string
@@ -69,7 +71,7 @@ export type Campaign = {
   social_image_url: string | null
   explainer_ml: string[]
   explainer_en: string[]
-  concern_selection_mode: 'single' | 'multiple'
+  concern_selection_mode: ConcernSelectionMode
   max_concern_selections: number | null
   allow_custom_concern: boolean
   custom_concern_label_en: string | null

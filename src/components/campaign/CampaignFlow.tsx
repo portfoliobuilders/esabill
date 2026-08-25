@@ -10,16 +10,11 @@ import { StatusRegion } from '@/components/campaign/StatusRegion'
 import { VoiceInputButton } from '@/components/campaign/VoiceInputButton'
 import { LanguageToggle } from '@/components/LanguageToggle'
 import { useLang } from '@/components/LanguageProvider'
-import { IconCheck, IconCopy, IconEnvelope, IconSparkle } from '@/components/ui/icons'
+import { IconCheck, IconCopy, IconEnvelope, IconGmail, IconSparkle } from '@/components/ui/icons'
 import { PageContainer } from '@/components/ui/PageContainer'
 import {
-  androidSendIntent,
   composeEmail,
   formatCompleteEmailCopy,
-  gmailComposeUrl,
-  gmailUrlTooLong,
-  mailtoUrl,
-  mailtoUrlTooLong,
   resolveMailTargets,
   type MailComposeParams,
 } from '@/lib/compose'
@@ -45,7 +40,10 @@ import {
 } from '@/lib/details-schema'
 import { formatCampaignDate } from '@/lib/format-date'
 import { isFieldEnabled, isFieldRequired, labelForField } from '@/lib/form-fields'
+import { applyGmailHandoff, clientPlatform, planGmailHandoff } from '@/lib/gmail-handoff'
 import { t, tReplace, type Lang } from '@/lib/i18n'
+import type { DistrictOption } from '@/lib/kerala-districts'
+import { launchMailCompose } from '@/lib/open-mail'
 import {
   compactLocationLine,
   isValidPincode,
@@ -127,6 +125,7 @@ export function CampaignFlow({
   const [aiError, setAiError] = useState('')
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle')
   const [pasteHint, setPasteHint] = useState(false)
+  const [emlHint, setEmlHint] = useState(false)
   const [status, setStatus] = useState('')
   const [submissionId, setSubmissionId] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
@@ -343,22 +342,9 @@ export function CampaignFlow({
     const params = mailParams()
     if (!params || params.to.length === 0) return
     setPasteHint(false)
-    const ua = navigator.userAgent
-    if (/Android/i.test(ua)) {
-      await copyPlainText(params.body).catch(() => undefined)
-      window.location.href = androidSendIntent(params, { fallbackUrl: mailtoUrl(params, { includeBody: false }) })
-      await persistAndHandoff('mailto', false)
-      return
-    }
-    if (mailtoUrlTooLong(params)) {
-      await copyPlainText(formatCompleteEmailCopy(params)).catch(() => undefined)
-      setCopyState('copied')
-      setPasteHint(true)
-      setStatus(t(lang, 'mailtoTooLong'))
-      await persistAndHandoff('copy', false)
-      return
-    }
-    window.location.href = mailtoUrl(params)
+    setEmlHint(false)
+    const result = launchMailCompose(params, 'mail_app')
+    setEmlHint(result === 'eml')
     await persistAndHandoff('mailto', false)
   }
 
@@ -366,15 +352,19 @@ export function CampaignFlow({
     if (!validate()) return
     const params = mailParams()
     if (!params || params.to.length === 0) return
-    if (gmailUrlTooLong(params)) {
+    setPasteHint(false)
+    setEmlHint(false)
+    const plan = planGmailHandoff(
+      params,
+      clientPlatform(navigator.userAgent, navigator.maxTouchPoints),
+      navigator.userAgent,
+    )
+    if (!plan.includeBody) {
       await copyPlainText(params.body).catch(() => undefined)
-      window.open(gmailComposeUrl(params, { includeBody: false }), '_blank', 'noopener,noreferrer')
       setPasteHint(true)
-      await persistAndHandoff('gmail_web', false)
-      return
     }
-    window.open(gmailComposeUrl(params), '_blank', 'noopener,noreferrer')
-    await persistAndHandoff('gmail_web', true)
+    applyGmailHandoff(plan)
+    await persistAndHandoff('gmail_web', plan.openInNewTab && plan.includeBody)
   }
 
   async function improveEmail() {
@@ -423,13 +413,12 @@ export function CampaignFlow({
       <StatusRegion message={status} />
 
       <section>
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <p className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-accent">
-            {t(lang, 'campaignStatus')}: {statusLabel(lang, view)}
-          </p>
-          <LanguageToggle />
-        </div>
-        <h1 lang={lang} className="font-display mt-4 text-[1.85rem] text-ink sm:text-4xl">{title}</h1>
+        <p className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-accent">
+          {t(lang, 'campaignStatus')}: {statusLabel(lang, view)}
+        </p>
+        <h1 lang={lang} className="font-display mt-4 text-[1.85rem] text-ink sm:text-4xl">
+          {title}
+        </h1>
         <div className="mt-5 max-w-3xl space-y-4 text-base leading-relaxed text-body sm:text-lg">
           {description.split(/\n{2,}/).map((para) => (
             <p key={para.slice(0, 48)}>{para}</p>
@@ -449,10 +438,14 @@ export function CampaignFlow({
       <CampaignSources sources={sources} />
 
       {view === 'inactive' ? (
-        <p className="mt-8 rounded-[8px] border border-rule bg-raised px-4 py-4 text-base text-ink">{t(lang, 'campaignInactivePublic')}</p>
+        <p className="mt-8 rounded-[8px] border border-rule bg-raised px-4 py-4 text-base text-ink">
+          {t(lang, 'campaignInactivePublic')}
+        </p>
       ) : null}
       {view === 'expired' ? (
-        <p className="mt-8 rounded-[8px] border border-rule bg-raised px-4 py-4 text-base text-ink">{t(lang, 'campaignExpiredThanks')}</p>
+        <p className="mt-8 rounded-[8px] border border-rule bg-raised px-4 py-4 text-base text-ink">
+          {t(lang, 'campaignExpiredThanks')}
+        </p>
       ) : null}
 
       {actionable ? (
@@ -491,7 +484,9 @@ export function CampaignFlow({
                       />
                       <span className="min-w-0">
                         <span className="flex flex-wrap items-center gap-2">
-                          <span className="font-mono text-xs font-semibold text-accent">{String(index + 1).padStart(2, '0')}</span>
+                          <span className="font-mono text-xs font-semibold text-accent">
+                            {String(index + 1).padStart(2, '0')}
+                          </span>
                           {on ? (
                             <span className="inline-flex items-center gap-1 text-sm font-semibold text-accent">
                               <IconCheck className="size-4" />
@@ -502,7 +497,9 @@ export function CampaignFlow({
                         <span className="mt-1 block text-base font-semibold leading-snug text-ink sm:text-lg">
                           {concernTitle(clause, lang)}
                         </span>
-                        <span className="mt-2 block text-sm leading-relaxed text-body sm:text-base">{expanded ? full : short}</span>
+                        <span className="mt-2 block text-sm leading-relaxed text-body sm:text-base">
+                          {expanded ? full : short}
+                        </span>
                         {needsMore ? (
                           <button
                             type="button"
@@ -593,9 +590,7 @@ export function CampaignFlow({
                 </p>
               ) : lookup?.found ? (
                 <div id="pincode-status" className="mt-2 text-sm text-ink">
-                  <p className="font-semibold text-accent">
-                    ✓ {locationLine}
-                  </p>
+                  <p className="font-semibold text-accent">✓ {locationLine}</p>
                   {lookup.common.postOffice || lookup.common.region ? (
                     <p className="mt-1 text-body">
                       {lookup.common.postOffice ? `${lookup.common.postOffice}` : ''}
@@ -759,8 +754,6 @@ export function CampaignFlow({
             </section>
           ) : null}
 
-          {showRead && letter ? <ReadAloudControls lang={lang} text={`${letter.subject}\n\n${letter.body}`} onStatus={setStatus} /> : null}
-
           {showAi ? (
             <div>
               <button
@@ -786,11 +779,15 @@ export function CampaignFlow({
           {isDryRun(mode) ? <p className="text-base text-amber-900">{t(lang, 'demoLetterHint')}</p> : null}
 
           <div className="flex flex-col gap-3">
+            {showRead && letter ? (
+              <ReadAloudControls lang={lang} text={`${letter.subject}\n\n${letter.body}`} onStatus={setStatus} />
+            ) : null}
             <button type="submit" className={cx(btnPrimary, 'min-h-14 w-full')}>
               <IconEnvelope className="size-5 shrink-0" />
               {t(lang, 'sendEmail')}
             </button>
             <button type="button" className={cx(btnSecondary, 'min-h-12 w-full')} onClick={() => void sendGmail()}>
+              <IconGmail className="size-5 shrink-0" />
               {t(lang, 'sendGmail')}
             </button>
             <button
@@ -814,6 +811,7 @@ export function CampaignFlow({
             </button>
           </div>
           {pasteHint ? <p className="text-sm text-ink">{t(lang, 'mailtoTooLong')}</p> : null}
+          {emlHint ? <p className="text-sm text-ink">{t(lang, 'emlHint')}</p> : null}
           {copyState === 'failed' ? <p className="text-sm text-red-800">{t(lang, 'copyFailed')}</p> : null}
         </form>
       ) : null}
