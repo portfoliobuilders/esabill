@@ -78,7 +78,7 @@ test('single mode email includes only the selected concern plus custom text', ()
     },
     lang: 'en',
   })
-  assert.match(result.body, /Selected Concern:/)
+  assert.match(result.body, /Concern:/)
   assert.ok(result.body.includes(fixtureClauses[2].title_en))
   assert.ok(result.body.includes(fixtureClauses[2].email_en))
   assert.ok(!result.body.includes(fixtureClauses[0].title_en))
