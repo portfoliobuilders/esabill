@@ -19,8 +19,6 @@ export type CampaignStatus = 'draft' | 'active' | 'inactive' | 'expired' | 'arch
 
 export type RecipientType = 'to' | 'cc' | 'bcc'
 
-export type ConcernSelectionMode = 'single' | 'multiple'
-
 export type FormFieldKey =
   | 'name'
   | 'email'
@@ -33,8 +31,6 @@ export type FormFieldKey =
   | 'pincode'
 
 export type AiBodyStatus = 'none' | 'draft' | 'approved'
-
-export type ConcernSelectionMode = 'single' | 'multiple'
 
 export type Campaign = {
   id: string

@@ -12,6 +12,8 @@ export const FORM_FIELD_KEYS: FormFieldKey[] = [
   'custom_message',
 ]
 
+export type FieldMode = 'disabled' | 'optional' | 'required'
+
 export const DEFAULT_FORM_FIELDS: Array<Omit<CampaignFormField, 'id' | 'campaign_id'>> = [
   { field_key: 'name', label_en: 'Name', label_ml: 'പേര്', is_enabled: true, is_required: true, display_order: 1 },
   { field_key: 'pincode', label_en: 'PIN Code', label_ml: 'പിൻ കോഡ്', is_enabled: true, is_required: false, display_order: 2 },
