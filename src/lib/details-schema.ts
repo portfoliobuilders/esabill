@@ -12,6 +12,7 @@ export type DetailsFields = {
   fullName: string
   addressLine: string
   panchayat: string
+  ward: string
   village: string
   district: string
   pincode: string
@@ -28,6 +29,7 @@ export const emptyDetails = (): DetailsFields => ({
   fullName: '',
   addressLine: '',
   panchayat: '',
+  ward: '',
   village: '',
   district: '',
   pincode: '',
@@ -107,7 +109,9 @@ export function createDetailsSchema(
 
   const address = isFieldRequired(fields, 'address') && !privacy ? requiredText(t(lang, 'errorAddress')) : optionalText()
   const panchayat = isFieldRequired(fields, 'local_body') && !privacy ? requiredText(t(lang, 'panchayat')) : optionalText()
+  const ward = isFieldRequired(fields, 'ward') && !privacy ? requiredText(t(lang, 'ward')) : optionalText()
   const village = isFieldRequired(fields, 'village') && !privacy ? requiredText(t(lang, 'village')) : optionalText()
+  const taluk = isFieldRequired(fields, 'taluk') && !privacy ? requiredText(t(lang, 'taluk')) : optionalText()
   const customText = z.string().max(MAX_CUSTOM_CHARS, t(lang, 'errorCustomText'))
 
   return z.object({
@@ -116,6 +120,7 @@ export function createDetailsSchema(
     phone,
     addressLine: address,
     panchayat,
+    ward,
     village,
     district,
     pincode,
@@ -123,7 +128,7 @@ export function createDetailsSchema(
     postOffice: optionalText(),
     state: optionalText(),
     postalRegion: optionalText(),
-    taluk: optionalText(),
+    taluk,
   })
 }
 

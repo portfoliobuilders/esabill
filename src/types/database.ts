@@ -25,6 +25,8 @@ export type FormFieldKey =
   | 'phone'
   | 'district'
   | 'village'
+  | 'ward'
+  | 'taluk'
   | 'local_body'
   | 'address'
   | 'custom_message'
@@ -177,6 +179,7 @@ export type Submission = {
   address_line: string
   panchayat: string | null
   village: string | null
+  ward: string | null
   district: string
   pincode: string | null
   language: string

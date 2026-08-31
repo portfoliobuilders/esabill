@@ -203,6 +203,8 @@ export const dictionary = {
     readMore: 'കൂടുതൽ വായിക്കുക',
     readLess: 'ചുരുക്കുക',
     village: 'വില്ലേജ്',
+    ward: 'വാർഡ്',
+    taluk: 'താലൂക്ക്',
     bccLabel: 'BCC',
     bccPrivateNote: 'ക്യാമ്പെയ്ൻ രേഖയ്ക്കായി ഒരു മറഞ്ഞ പകർപ്പ് ഉൾപ്പെടുത്തിയിരിക്കുന്നു.',
     privacyDetails:
@@ -475,6 +477,8 @@ export const dictionary = {
     readMore: 'Read more',
     readLess: 'Read less',
     village: 'Village',
+    ward: 'Ward',
+    taluk: 'Taluk',
     bccLabel: 'BCC',
     bccPrivateNote: 'A hidden copy is included for campaign records.',
     privacyDetails:

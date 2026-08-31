@@ -178,7 +178,7 @@ export function postalIdentityFromLookup(
   }
 }
 
-export function withPostalIdentity<T extends { district: string }>(
+export function withPostalIdentity<T extends { district: string; taluk?: string }>(
   details: T,
   identity: Partial<PostalIdentityFields>,
 ): T & PostalIdentityFields {
@@ -187,7 +187,7 @@ export function withPostalIdentity<T extends { district: string }>(
     postOffice: identity.postOffice ?? '',
     state: identity.state ?? '',
     postalRegion: identity.postalRegion ?? '',
-    taluk: identity.taluk ?? '',
+    taluk: (details.taluk || identity.taluk) ?? '',
     district: identity.district || details.district,
   }
 }

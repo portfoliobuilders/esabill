@@ -34,6 +34,7 @@ const letterInputSchema = z.object({
   phone: z.string().trim().optional().default(''),
   address: z.string().trim().optional().default(''),
   panchayat: z.string().trim().optional().default(''),
+  ward: z.string().trim().optional().default(''),
   village: z.string().trim().optional().default(''),
   district: z.string().trim().optional().default(''),
   pincode: z.string().trim().optional().default(''),
@@ -132,6 +133,7 @@ async function composeCanonicalLetter(input: LetterFields): Promise<ActionResult
       fullName: input.fullName,
       addressLine: input.address,
       panchayat: input.panchayat,
+      ward: input.ward,
       village: input.village,
       district: input.district,
       pincode: input.pincode,
@@ -237,6 +239,7 @@ async function storeCanonicalLetter(
       .from('submissions')
       .update({
         village: input.village || null,
+        ward: input.ward || null,
         generated_bcc: generatedBcc,
       })
       .eq('id', submissionId as string)

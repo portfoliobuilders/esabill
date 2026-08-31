@@ -8,7 +8,9 @@ export const FORM_FIELD_KEYS: FormFieldKey[] = [
   'email',
   'district',
   'local_body',
+  'ward',
   'village',
+  'taluk',
   'custom_message',
 ]
 
@@ -22,8 +24,10 @@ export const DEFAULT_FORM_FIELDS: Array<Omit<CampaignFormField, 'id' | 'campaign
   { field_key: 'email', label_en: 'Email', label_ml: 'ഇമെയിൽ', is_enabled: false, is_required: false, display_order: 5 },
   { field_key: 'district', label_en: 'District', label_ml: 'ജില്ല', is_enabled: false, is_required: false, display_order: 6 },
   { field_key: 'local_body', label_en: 'Panchayat / Municipality', label_ml: 'പഞ്ചായത്ത് / മുനിസിപ്പാലിറ്റി', is_enabled: false, is_required: false, display_order: 7 },
-  { field_key: 'village', label_en: 'Village', label_ml: 'വില്ലേജ്', is_enabled: false, is_required: false, display_order: 8 },
-  { field_key: 'custom_message', label_en: 'Additional concern', label_ml: 'അധിക ആശങ്ക', is_enabled: false, is_required: false, display_order: 9 },
+  { field_key: 'ward', label_en: 'Ward', label_ml: 'വാർഡ്', is_enabled: false, is_required: false, display_order: 8 },
+  { field_key: 'village', label_en: 'Village', label_ml: 'വില്ലേജ്', is_enabled: false, is_required: false, display_order: 9 },
+  { field_key: 'taluk', label_en: 'Taluk', label_ml: 'താലൂക്ക്', is_enabled: false, is_required: false, display_order: 10 },
+  { field_key: 'custom_message', label_en: 'Additional concern', label_ml: 'അധിക ആശങ്ക', is_enabled: false, is_required: false, display_order: 11 },
 ]
 
 export function normalizeFormFields(rows: CampaignFormField[] | null | undefined): CampaignFormField[] {
