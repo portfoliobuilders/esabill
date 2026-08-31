@@ -41,7 +41,6 @@ import {
 } from '@/lib/details-schema'
 import { formatCampaignDate } from '@/lib/format-date'
 import { isFieldEnabled, isFieldRequired, labelForField } from '@/lib/form-fields'
-import { applyGmailHandoff, clientPlatform, planGmailHandoff } from '@/lib/gmail-handoff'
 import { t, tReplace, type Lang } from '@/lib/i18n'
 import type { DistrictOption } from '@/lib/kerala-districts'
 import { launchMailCompose } from '@/lib/open-mail'
@@ -262,6 +261,16 @@ export function CampaignFlow({
     setAiError('')
   }
 
+  function revealFirstError() {
+    window.setTimeout(() => {
+      const invalid = document.querySelector<HTMLElement>('[aria-invalid="true"]')
+      const alert = document.querySelector<HTMLElement>('[role="alert"]')
+      const target = invalid ?? alert
+      target?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      invalid?.focus()
+    }, 50)
+  }
+
   function validate(): boolean {
     const validity = validatePredefinedSelection({
       mode: config.mode,
@@ -270,6 +279,7 @@ export function CampaignFlow({
     })
     if (validity !== 'ok') {
       setConcernError(true)
+      revealFirstError()
       return false
     }
     const parsed = createDetailsSchema(
@@ -280,6 +290,7 @@ export function CampaignFlow({
     ).safeParse(details)
     if (!parsed.success) {
       setErrors(fieldErrorsFromZod(parsed.error))
+      revealFirstError()
       return false
     }
     setErrors({})
@@ -363,17 +374,9 @@ export function CampaignFlow({
     if (!params || params.to.length === 0) return
     setPasteHint(false)
     setEmlHint(false)
-    const plan = planGmailHandoff(
-      params,
-      clientPlatform(navigator.userAgent, navigator.maxTouchPoints),
-      navigator.userAgent,
-    )
-    if (!plan.includeBody) {
-      await copyPlainText(params.body).catch(() => undefined)
-      setPasteHint(true)
-    }
-    applyGmailHandoff(plan)
-    await persistAndHandoff('gmail_web', plan.openInNewTab && plan.includeBody)
+    const result = launchMailCompose(params, 'gmail')
+    setEmlHint(result === 'eml')
+    await persistAndHandoff('gmail_web', result === 'gmail_tab')
   }
 
   async function improveEmail() {

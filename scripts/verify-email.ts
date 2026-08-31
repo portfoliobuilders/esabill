@@ -8,6 +8,7 @@ import {
   formatUnsentEml,
   gmailAppComposeUrl,
   androidGmailAppIntent,
+  androidGmailAppComposeIntent,
   gmailComposeUrl,
   liveMailTargets,
   mailtoUrl,
@@ -15,6 +16,8 @@ import {
   resolveMailTargets,
   uniqueEmails,
 } from '../src/lib/compose'
+import { planGmailHandoff } from '../src/lib/gmail-handoff'
+import { planMailLaunch } from '../src/lib/open-mail'
 import { normalizeIndianPhone } from '../src/lib/phone'
 
 const details = {
@@ -202,6 +205,35 @@ assert.match(appIntent, /package=com\.google\.android\.gm/)
 assert.match(appIntent, /scheme=https/)
 assert.ok(appIntent.includes(encodeURIComponent(gmail)))
 assert.ok(appIntent.endsWith(';end'))
+
+const liveLetter = {
+  to: targets.to,
+  cc: targets.cc,
+  bcc: targets.bcc,
+  subject: full.subject,
+  body: full.body,
+}
+const gmailAppIntent = androidGmailAppComposeIntent(liveLetter)
+assert.match(gmailAppIntent, /^intent:\/\//)
+assert.match(gmailAppIntent, /scheme=googlegmail/)
+assert.match(gmailAppIntent, /package=com\.google\.android\.gm/)
+assert.ok(gmailAppIntent.includes(encodeURIComponent(full.body)))
+assert.ok(gmailAppIntent.includes(encodeURIComponent(full.subject)))
+
+const androidGmail = planGmailHandoff(
+  liveLetter,
+  'android',
+  'Mozilla/5.0 (Linux; Android 14) Chrome/120.0.0.0 Mobile Safari/537.36',
+)
+assert.equal(androidGmail.includeBody, true)
+assert.match(androidGmail.href, /scheme=googlegmail/)
+assert.ok(androidGmail.href.includes(encodeURIComponent(full.body)))
+
+const androidMail = planMailLaunch(liveLetter, 'mail_app', 'android')
+assert.ok(androidMail.kind === 'mailto_url' || androidMail.kind === 'android_intent')
+if (androidMail.kind === 'mailto_url') {
+  assert.ok(mailtoUrl(liveLetter).includes(encodeURIComponent(full.body)))
+}
 
 const withBcc = {
   ...fixtureCampaign,

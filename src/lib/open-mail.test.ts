@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { androidSendIntent, formatUnsentEml, gmailComposeUrl, mailtoUrl } from './compose'
+import { androidSendIntent, formatUnsentEml, gmailAppComposeUrl, gmailComposeUrl, mailtoUrl } from './compose'
 import { clientMailPlatform, planMailLaunch } from './open-mail'
 
 const longMalayalam = 'മലയാളം കത്ത് '.repeat(400)
@@ -23,26 +23,28 @@ test('mail platforms', () => {
 test('long letters still include the full body in mailto, Gmail, Android, and eml', () => {
   const mail = mailtoUrl(params)
   const gmail = gmailComposeUrl(params)
+  const app = gmailAppComposeUrl(params)
   const eml = formatUnsentEml(params)
   const encodedBody = encodeURIComponent(params.body)
   assert.ok(mail.includes(encodedBody), 'mailto must keep the full body')
   assert.ok(gmail.includes(encodedBody), 'gmail compose must keep the full body')
+  assert.ok(app.includes(encodedBody), 'gmail app compose must keep the full body')
   assert.ok(eml.includes(params.body), 'eml draft must keep the full body')
   assert.match(eml, /^X-Unsent: 1\r\n/)
 })
 
 test('send never falls back to a body-less compose URL', () => {
   const longAndroid = planMailLaunch(params, 'mail_app', 'android')
-  assert.ok(longAndroid.kind === 'mailto_url' || longAndroid.kind === 'android_intent')
+  assert.ok(longAndroid.kind === 'android_intent' || longAndroid.kind === 'eml')
   if (longAndroid.kind === 'android_intent') {
     assert.equal(longAndroid.gmailOnly, false)
   }
 
   const gmailPlan = planMailLaunch(params, 'gmail', 'other')
-  assert.ok(gmailPlan.kind === 'gmail_url' || gmailPlan.kind === 'eml')
-  if (gmailPlan.kind === 'gmail_url') {
-    assert.ok(gmailComposeUrl(params).includes(encodeURIComponent(params.body)))
-  }
+  assert.ok(gmailPlan.kind === 'mailto_url' || gmailPlan.kind === 'eml')
+
+  const androidGmail = planMailLaunch(params, 'gmail', 'android')
+  assert.equal(androidGmail.kind, 'gmail_native')
 
   const iosPlan = planMailLaunch(params, 'mail_app', 'ios')
   assert.ok(iosPlan.kind === 'mailto_url' || iosPlan.kind === 'eml')
@@ -72,6 +74,7 @@ test('short letters open Gmail and iOS mail with the body in the link', () => {
   assert.equal(planMailLaunch(short, 'gmail', 'other').kind, 'gmail_url')
   assert.equal(planMailLaunch(short, 'mail_app', 'ios').kind, 'mailto_url')
   assert.equal(planMailLaunch(short, 'mail_app', 'android').kind, 'mailto_url')
-  assert.equal(planMailLaunch(short, 'gmail', 'android').kind, 'mailto_url')
+  assert.equal(planMailLaunch(short, 'gmail', 'android').kind, 'gmail_native')
+  assert.equal(planMailLaunch(short, 'gmail', 'ios').kind, 'gmail_native')
   assert.equal(planMailLaunch(short, 'mail_app', 'other').kind, 'mailto_url')
 })

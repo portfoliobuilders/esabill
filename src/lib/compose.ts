@@ -15,6 +15,15 @@ export const URL_LENGTH_WARN = 1900
 export const GMAIL_URL_WARN = 8192
 /** Windows ShellExecute / mailto practical cap. Unicode letters percent-encode to ~9x. */
 export const MAILTO_URL_WARN = 30_000
+/** Android Chrome silently ignores mailto: links longer than this. */
+export const ANDROID_MAILTO_URL_WARN = 8_000
+/** iOS Safari mailto is generous; still cap before the OS URL buffer. */
+export const IOS_MAILTO_URL_WARN = 80_000
+/** googlegmail:// and intent:// are not HTTP, so they can carry a full Malayalam letter. */
+export const GMAIL_APP_URL_WARN = 100_000
+export const INTENT_URL_WARN = 100_000
+
+export type MailUrlPlatform = 'android' | 'ios' | 'other'
 
 const GMAIL_ANDROID_PACKAGE = 'com.google.android.gm'
 
@@ -317,6 +326,18 @@ export function androidGmailAppIntent(webComposeUrl: string): string {
   return `intent://${rest}#Intent;scheme=https;package=${GMAIL_ANDROID_PACKAGE};S.browser_fallback_url=${encodeURIComponent(webComposeUrl)};end`
 }
 
+/**
+ * Chrome Android intent that opens the Gmail app compose screen with to/cc/subject/body.
+ * Uses the googlegmail scheme so the letter is not limited by Gmail's 8 KB web URL cap.
+ */
+export function androidGmailAppComposeIntent(params: MailComposeParams, fallbackUrl?: string): string {
+  const rest = gmailAppComposeUrl(params).replace(/^googlegmail:\/\//i, '')
+  const extras = ['scheme=googlegmail', `package=${GMAIL_ANDROID_PACKAGE}`]
+  if (fallbackUrl) extras.push(`S.browser_fallback_url=${encodeURIComponent(fallbackUrl)}`)
+  extras.push('end')
+  return `intent://${rest}#Intent;${extras.join(';')}`
+}
+
 export function mailtoUrl(params: MailComposeParams, options?: { includeBody?: boolean }): string {
   const to = toHeader(params.to)
   const cc = ccHeader(params.cc)
@@ -337,8 +358,19 @@ export function gmailUrlTooLong(params: MailComposeParams): boolean {
   return gmailComposeUrl(params).length > GMAIL_URL_WARN
 }
 
+export function gmailAppUrlTooLong(params: MailComposeParams): boolean {
+  return gmailAppComposeUrl(params).length > GMAIL_APP_URL_WARN
+}
+
 export function mailtoUrlTooLong(params: MailComposeParams): boolean {
   return mailtoUrl(params).length > MAILTO_URL_WARN
+}
+
+export function mailtoUrlTooLongFor(params: MailComposeParams, platform: MailUrlPlatform): boolean {
+  const length = mailtoUrl(params).length
+  if (platform === 'android') return length > ANDROID_MAILTO_URL_WARN
+  if (platform === 'ios') return length > IOS_MAILTO_URL_WARN
+  return length > MAILTO_URL_WARN
 }
 
 function utf8Base64(text: string): string {

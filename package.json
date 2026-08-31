@@ -7,7 +7,7 @@
     "build": "next build --turbopack",
     "start": "next start",
     "lint": "eslint",
-    "test": "npx tsx --test src/lib/admin/admin-logic.test.ts src/lib/campaign-sources.test.ts src/lib/tts.test.ts && npx tsx scripts/verify-email.ts",
+    "test": "npx tsx --test src/lib/admin/admin-logic.test.ts src/lib/campaign-sources.test.ts src/lib/tts.test.ts src/lib/gmail-handoff.test.ts src/lib/open-mail.test.ts && npx tsx scripts/verify-email.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
