@@ -152,8 +152,6 @@ export const dictionary = {
     demoCountNote: 'ഇത് ഈ സൈറ്റിൽ തയ്യാറാക്കിയ എതിർപ്പുകളുടെ എണ്ണമാണ്. തത്സമയ കൂടിയാലോചനയല്ല.',
     footerFaq: 'ചോദ്യങ്ങൾ',
     footerContact: 'ബന്ധപ്പെടുക',
-    footerCopyright: '© 2026 ജനശബ്ദം',
-    poweredBy: 'POWERED BY',
     languageGroup: 'ഭാഷ',
     detailsHowUsed:
       'ഈ വിവരം കത്ത് തയ്യാറാക്കാനും സ്ഥിരീകരിച്ച എതിർപ്പുകൾ എണ്ണാനും ഉപയോഗിക്കും. പട്ടികയിലേക്കോ രാഷ്ട്രീയ പാർട്ടിക്കോ കൈമാറില്ല. വിശദാംശങ്ങൾ സ്വകാര്യതാ അറിയിപ്പിൽ.',
@@ -266,7 +264,6 @@ export const dictionary = {
     aiGenerated: 'മെച്ചപ്പെടുത്തിയ ഇമെയിൽ തയ്യാറാണ്',
     sendAnyway: 'ഇമെയിൽ അയയ്ക്കുക',
     previewEmail: 'തയ്യാറാക്കിയ ഇമെയിൽ',
-    portfolixCredit: 'Portfolix.tech വികസിപ്പിച്ച വെബ്‌സൈറ്റ്',
     sourcesHeading: 'വാർത്തകളും അവലംബങ്ങളും / Sources & References',
     sourcesView: 'View',
     sourcesSupportNote:
@@ -424,8 +421,6 @@ export const dictionary = {
     demoCountNote: 'This is the prepared count from this site. It is not a live consultation.',
     footerFaq: 'FAQ',
     footerContact: 'Contact',
-    footerCopyright: '© 2026 Janashabdam',
-    poweredBy: 'POWERED BY',
     languageGroup: 'Language',
     detailsHowUsed:
       'We use these details to compose your letter and count confirmed objections. They are not shared with a mailing list or a political party. See the privacy notice.',
@@ -539,7 +534,6 @@ export const dictionary = {
     aiGenerated: 'Improved email is ready',
     sendAnyway: 'Send Email',
     previewEmail: 'Prepared email',
-    portfolixCredit: 'Website developed by Portfolix.tech',
     sourcesHeading: 'Sources & References',
     sourcesView: 'View',
     sourcesSupportNote: 'These are supporting news items and references. They are not copied into the email.',
