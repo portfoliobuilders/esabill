@@ -22,6 +22,7 @@ export type ComposeDetails = {
   fullName: string
   addressLine: string
   panchayat: string
+  ward?: string
   village?: string
   district: string
   pincode: string
@@ -168,7 +169,9 @@ function senderValues(
   | 'phone'
   | 'address'
   | 'panchayat'
+  | 'ward'
   | 'village'
+  | 'taluk'
   | 'district'
   | 'pincode'
   | 'constituency'
@@ -185,7 +188,9 @@ function senderValues(
     phone: details.phone,
     address: details.addressLine,
     panchayat: details.panchayat,
+    ward: details.ward ?? '',
     village: details.village ?? '',
+    taluk: details.taluk ?? '',
     district: details.district,
     pincode: details.pincode,
     constituency: '',

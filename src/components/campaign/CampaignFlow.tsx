@@ -314,6 +314,7 @@ export function CampaignFlow({
         phone: details.phone,
         address: details.addressLine,
         panchayat: details.panchayat,
+        ward: details.ward,
         village: details.village,
         district: postalIdentity.district || details.district,
         pincode: details.pincode,
@@ -328,7 +329,7 @@ export function CampaignFlow({
         postOffice: postalIdentity.postOffice,
         state: postalIdentity.state,
         postalRegion: postalIdentity.postalRegion,
-        taluk: postalIdentity.taluk,
+        taluk: details.taluk || postalIdentity.taluk,
       })
       if (prepared.ok) id = prepared.data.id
       setSubmissionId(id)
@@ -685,6 +686,19 @@ export function CampaignFlow({
               value={details.panchayat}
               error={errors.panchayat}
               onChange={(value) => patchDetails({ panchayat: value })}
+              voice={showVoice ? { lang, onStatus: setStatus } : null}
+            />
+          ) : null}
+
+          {isFieldEnabled(formFields, 'ward') && !privacyOn ? (
+            <Field
+              id="ward"
+              label={labelForField(formFields, 'ward', lang, t(lang, 'ward'))}
+              required={isFieldRequired(formFields, 'ward')}
+              value={details.ward}
+              error={errors.ward}
+              onChange={(value) => patchDetails({ ward: value })}
+              voice={showVoice ? { lang, onStatus: setStatus } : null}
             />
           ) : null}
 
@@ -696,6 +710,19 @@ export function CampaignFlow({
               value={details.village}
               error={errors.village}
               onChange={(value) => patchDetails({ village: value })}
+              voice={showVoice ? { lang, onStatus: setStatus } : null}
+            />
+          ) : null}
+
+          {isFieldEnabled(formFields, 'taluk') && !privacyOn ? (
+            <Field
+              id="taluk"
+              label={labelForField(formFields, 'taluk', lang, t(lang, 'taluk'))}
+              required={isFieldRequired(formFields, 'taluk')}
+              value={details.taluk}
+              error={errors.taluk}
+              onChange={(value) => patchDetails({ taluk: value })}
+              voice={showVoice ? { lang, onStatus: setStatus } : null}
             />
           ) : null}
 

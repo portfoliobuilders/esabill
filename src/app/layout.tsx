@@ -147,7 +147,6 @@ export default async function RootLayout({
               disclaimerEn={settings?.public_disclaimer_en}
               footerMl={settings?.public_footer_ml}
               footerEn={settings?.public_footer_en}
-              supportEmail={settings?.support_email}
             />
           )}
         </LanguageProvider>
