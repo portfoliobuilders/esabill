@@ -1,7 +1,6 @@
--- Western Ghat People Protection Forum (പശ്ചിമഘട്ട ജനസംരക്ഷണ സമിതി)
--- Eleven selectable letter templates for the July 2026 Western Ghats ESA draft notification.
--- Campaign stays draft/inactive until a live consultation is verified from a primary source.
--- Full bilingual parity: each template has complete English and Malayalam content.
+-- Western Ghat People Protection Forum — bilingual parity update
+-- Adds Letter 11 (WGPPF11), full EN/ML parity across all eleven templates,
+-- ward/taluk body fields, and corrected clause text. Idempotent upserts.
 
 do $$
 declare
