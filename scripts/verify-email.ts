@@ -75,22 +75,28 @@ assert.ok(!single.body.includes(fixtureClauses[0].title_en))
 assert.doesNotMatch(single.body, /^2\. /m)
 
 const targets = liveMailTargets(fixtureCampaign)
-assert.deepEqual(targets.to, ['min.for@kerala.gov.in'])
+assert.deepEqual(targets.to, ['esz-mef@nic.in'])
 assert.deepEqual(targets.cc, [
-  'prlsecy.forest@kerala.gov.in',
-  'pccf.for@kerala.gov.in',
-  'www.for@kerala.gov.in',
-  'pccf-d.for@kerala.gov.in',
-  'pccf-flr.for@kerala.gov.in',
-])
-assert.deepEqual(targets.bcc, ['esacomplaints2026@gmail.com'])
-assert.deepEqual(uniqueEmails([...targets.to, ...targets.cc, ...targets.bcc]), [
   'min.for@kerala.gov.in',
   'prlsecy.forest@kerala.gov.in',
   'pccf.for@kerala.gov.in',
-  'www.for@kerala.gov.in',
+  'cww.for@kerala.gov.in',
   'pccf-d.for@kerala.gov.in',
   'pccf-flr.for@kerala.gov.in',
+  'environmentdirectorate@gmail.com',
+  'envt.dir@kerala.gov.in',
+])
+assert.deepEqual(targets.bcc, ['esacomplaints2026@gmail.com'])
+assert.deepEqual(uniqueEmails([...targets.to, ...targets.cc, ...targets.bcc]), [
+  'esz-mef@nic.in',
+  'min.for@kerala.gov.in',
+  'prlsecy.forest@kerala.gov.in',
+  'pccf.for@kerala.gov.in',
+  'cww.for@kerala.gov.in',
+  'pccf-d.for@kerala.gov.in',
+  'pccf-flr.for@kerala.gov.in',
+  'environmentdirectorate@gmail.com',
+  'envt.dir@kerala.gov.in',
   'esacomplaints2026@gmail.com',
 ])
 
@@ -131,13 +137,13 @@ const mail = mailtoUrl({
   body: selected.body,
 })
 
-assert.match(gmail, /to=min\.for%40kerala\.gov\.in/)
-assert.match(gmail, /cc=prlsecy\.forest%40kerala\.gov\.in/)
+assert.match(gmail, /to=esz-mef%40nic\.in/)
+assert.match(gmail, /cc=min\.for%40kerala\.gov\.in/)
 assert.match(gmail, /su=/)
 assert.doesNotMatch(gmail, /Forest/)
 assert.doesNotMatch(gmail, /undefined/)
-assert.match(mail, /mailto:min\.for%40kerala\.gov\.in/)
-assert.doesNotMatch(mail, /esz-mef@nic\.in/)
+assert.match(mail, /mailto:esz-mef%40nic\.in/)
+assert.match(mail, /min\.for%40kerala\.gov\.in/)
 assert.equal(
   mailtoUrlTooLong({ to: targets.to, cc: targets.cc, subject: full.subject, body: full.body }),
   false,
@@ -149,8 +155,8 @@ const copied = formatCompleteEmailCopy({
   subject: full.subject,
   body: full.body,
 })
-assert.match(copied, /To:\nmin\.for@kerala\.gov\.in/)
-assert.match(copied, /CC:\nprlsecy\.forest@kerala\.gov\.in/)
+assert.match(copied, /To:\nesz-mef@nic\.in/)
+assert.match(copied, /CC:\nmin\.for@kerala\.gov\.in/)
 assert.ok(copied.includes(`Subject: ${full.subject}`))
 
 const eml = formatUnsentEml({
@@ -160,8 +166,8 @@ const eml = formatUnsentEml({
   body: full.body,
 })
 assert.match(eml, /^X-Unsent: 1\r\n/)
-assert.match(eml, /To: min\.for@kerala\.gov\.in/)
-assert.match(eml, /Cc: prlsecy\.forest@kerala\.gov\.in/)
+assert.match(eml, /To: esz-mef@nic\.in/)
+assert.match(eml, /Cc: min\.for@kerala\.gov\.in/)
 assert.ok(eml.includes(full.body.replace(/\n/g, '\r\n')))
 
 const intent = androidSendIntent(
@@ -187,8 +193,8 @@ const appUrl = gmailAppComposeUrl({
   body: selected.body,
 })
 assert.match(appUrl, /^googlegmail:\/\/\/co\?/)
-assert.match(appUrl, /to=min\.for%40kerala\.gov\.in/)
-assert.match(appUrl, /cc=prlsecy\.forest%40kerala\.gov\.in/)
+assert.match(appUrl, /to=esz-mef%40nic\.in/)
+assert.match(appUrl, /cc=min\.for%40kerala\.gov\.in/)
 assert.match(appUrl, /subject=/)
 assert.doesNotMatch(appUrl, /undefined/)
 assert.ok(appUrl.includes(encodeURIComponent(selected.body)))
