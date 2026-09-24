@@ -25,6 +25,7 @@ import { improveCampaignConcern } from '@/lib/ai/improve'
 import { DEFAULT_FORM_FIELDS } from '@/lib/form-fields'
 import { invalidEmails, parseEmailList, rowsFromLists } from '@/lib/recipients'
 import { createServiceClient } from '@/lib/supabase/server'
+import { fetchEveryPage } from '@/lib/supabase/paginate'
 
 export type ActionOk = { ok: true; id?: string }
 export type ActionErr = { ok: false; error: string }
@@ -73,17 +74,34 @@ export async function fetchCampaignBoard(): Promise<CampaignBoardRow[]> {
   for (const id of ids) counts.set(id, { concerns: 0, submissions: 0 })
 
   if (ids.length > 0) {
-    const [{ data: concerns }, { data: submissions }] = await Promise.all([
-      supabase.from('objection_clauses').select('campaign_id').in('campaign_id', ids),
-      supabase.from('submissions').select('campaign_id').in('campaign_id', ids).eq('is_test', false),
+    const [concerns, submissionCounts] = await Promise.all([
+      fetchEveryPage((from, to) =>
+        supabase
+          .from('objection_clauses')
+          .select('id, campaign_id')
+          .in('campaign_id', ids)
+          .order('id', { ascending: true })
+          .range(from, to),
+      ),
+      Promise.all(
+        ids.map(async (id) => {
+          const { count, error: countError } = await supabase
+            .from('submissions')
+            .select('id', { count: 'exact', head: true })
+            .eq('campaign_id', id)
+            .eq('is_test', false)
+          if (countError) throw countError
+          return [id, count ?? 0] as const
+        }),
+      ),
     ])
-    for (const row of concerns ?? []) {
+    for (const row of concerns) {
       const entry = counts.get(row.campaign_id as string)
       if (entry) entry.concerns += 1
     }
-    for (const row of submissions ?? []) {
-      const entry = counts.get(row.campaign_id as string)
-      if (entry) entry.submissions += 1
+    for (const [id, count] of submissionCounts) {
+      const entry = counts.get(id)
+      if (entry) entry.submissions = count
     }
   }
 

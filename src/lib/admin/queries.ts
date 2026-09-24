@@ -16,7 +16,9 @@ import {
   type DisplayStage,
   type FunnelCounts,
 } from '@/lib/admin/stages'
+import { fetchSqlMetrics, type SqlMetrics } from '@/lib/admin/sql-metrics'
 import { createServiceClient } from '@/lib/supabase/server'
+import { fetchEveryPage } from '@/lib/supabase/paginate'
 import type { SubmissionStatus } from '@/types/database'
 
 export type { AdminFilters }
@@ -233,16 +235,19 @@ type LightRow = {
 
 async function fetchLightRows(campaignId: string, includeTests: boolean): Promise<LightRow[]> {
   const supabase = createServiceClient()
-  let query = supabase
-    .from('submissions')
-    .select(
-      'id, status, district, constituency_id, created_at, verified_at, handoff_at, confirmed_at, send_method, language, custom_text, is_test',
-    )
-    .eq('campaign_id', campaignId)
-  if (!includeTests) query = query.eq('is_test', false)
-  const { data, error } = await query
-  if (error) throw error
-  return (data ?? []) as LightRow[]
+  return fetchEveryPage(async (from, to) => {
+    let query = supabase
+      .from('submissions')
+      .select(
+        'id, status, district, constituency_id, created_at, verified_at, handoff_at, confirmed_at, send_method, language, custom_text, is_test',
+      )
+      .eq('campaign_id', campaignId)
+      .order('id', { ascending: true })
+      .range(from, to)
+    if (!includeTests) query = query.eq('is_test', false)
+    const { data, error } = await query
+    return { data: (data ?? null) as LightRow[] | null, error }
+  })
 }
 
 function buildTrend(rows: LightRow[], range: TrendRange): TrendPoint[] {
@@ -291,29 +296,39 @@ async function fetchConcernStats(
   participantCount: number,
 ): Promise<ConcernStat[]> {
   const supabase = createServiceClient()
-  let query = supabase.from('submission_clauses').select(`
+  const data = await fetchEveryPage(async (from, to) => {
+    let query = supabase
+      .from('submission_clauses')
+      .select(
+        `
     clause_id,
+    submission_id,
     objection_clauses(id, code, title_ml, title_en, section_ref),
     submissions!inner(id, campaign_id, is_test)
-  `)
-  query = query.eq('submissions.campaign_id', campaignId)
-  if (!includeTests) query = query.eq('submissions.is_test', false)
-  const { data, error } = await query
-  if (error) throw error
+  `,
+      )
+      .eq('submissions.campaign_id', campaignId)
+      .order('submission_id', { ascending: true })
+      .order('clause_id', { ascending: true })
+      .range(from, to)
+    if (!includeTests) query = query.eq('submissions.is_test', false)
+    return query
+  })
 
   const seen = new Map<string, Set<string>>()
   const meta = new Map<string, Omit<ConcernStat, 'cnt' | 'pct'>>()
   for (const row of data ?? []) {
     const subRaw = row.submissions as { id: string } | { id: string }[] | null
     const sub = (Array.isArray(subRaw) ? subRaw[0] : subRaw) as { id: string } | null
+    const submissionId = (sub?.id ?? (row.submission_id as string | undefined)) || ''
     const ocRaw = row.objection_clauses as
       | { id: string; code: string; title_ml: string; title_en: string; section_ref: string | null }
       | { id: string; code: string; title_ml: string; title_en: string; section_ref: string | null }[]
       | null
     const oc = Array.isArray(ocRaw) ? ocRaw[0] : ocRaw
-    if (!sub?.id || !oc?.id) continue
+    if (!submissionId || !oc?.id) continue
     if (!seen.has(oc.id)) seen.set(oc.id, new Set())
-    seen.get(oc.id)!.add(sub.id)
+    seen.get(oc.id)!.add(submissionId)
     meta.set(oc.id, {
       id: oc.id,
       code: oc.code,
@@ -331,11 +346,126 @@ async function fetchConcernStats(
     .sort((a, b) => b.cnt - a.cnt)
 }
 
+function filterSqlTrend(points: SqlMetrics['trend'], range: TrendRange): TrendPoint[] {
+  const start = rangeStart(range)
+  const filtered = points.filter((point) => {
+    if (!point.day) return false
+    if (!start) return true
+    return new Date(`${point.day}T00:00:00+05:30`) >= start
+  })
+  if (filtered.length === 0) {
+    const today = istDay(new Date().toISOString()) ?? new Date().toISOString().slice(0, 10)
+    return [{ day: today, prepared: 0, emailOpened: 0, confirmedSent: 0 }]
+  }
+  return filtered
+}
+
+function dashboardFromSql(sql: SqlMetrics, trendRange: TrendRange): DashboardData {
+  const funnel = funnelFromStatusCounts(sql.statusCounts)
+  const topConcerns = sql.concerns.slice(0, 5).map((item) => ({
+    ...item,
+    pct: pct(item.cnt, funnel.started),
+  }))
+  return {
+    kpis: [
+      {
+        key: 'participants',
+        label: 'Total Participants',
+        value: funnel.started,
+        hint: 'Real submissions for this campaign',
+        weekPct: weekChangePct(sql.thisWeek, sql.prevWeek),
+      },
+      {
+        key: 'prepared',
+        label: 'Objections Prepared',
+        value: funnel.prepared,
+        hint: 'Reached email preview',
+        weekPct: null,
+      },
+      {
+        key: 'opened',
+        label: 'Email Opened',
+        value: funnel.emailOpened,
+        hint: 'Mail app or Gmail was opened',
+        weekPct: null,
+      },
+      {
+        key: 'confirmed',
+        label: 'Confirmed Sent',
+        value: funnel.confirmedSent,
+        hint: 'Citizen confirmed sending',
+        weekPct: weekChangePct(sql.confirmedThisWeek, sql.confirmedPrevWeek),
+      },
+      {
+        key: 'districts',
+        label: 'Districts Reached',
+        value: sql.districts.length,
+        hint: 'Distinct districts among participants',
+        weekPct: null,
+      },
+      {
+        key: 'today',
+        label: 'Today',
+        value: sql.today,
+        hint: 'New real submissions in 24 hours',
+        weekPct: null,
+      },
+    ],
+    funnel,
+    funnelPercents: {
+      prepared: conversion(funnel.started, funnel.prepared),
+      emailOpened: conversion(funnel.prepared, funnel.emailOpened),
+      confirmedSent: conversion(funnel.emailOpened, funnel.confirmedSent),
+    },
+    dropOff: {
+      prepared: dropOff(funnel.started, funnel.prepared),
+      emailOpened: dropOff(funnel.prepared, funnel.emailOpened),
+      confirmedSent: dropOff(funnel.emailOpened, funnel.confirmedSent),
+    },
+    topConcerns,
+    topDistricts: sql.districts.slice(0, 8),
+    topConstituencies: sql.constituencies.slice(0, 8),
+    trend: filterSqlTrend(sql.trend, trendRange),
+    participantCount: funnel.started,
+  }
+}
+
+function analyticsFromSql(sql: SqlMetrics, trendRange: TrendRange): AnalyticsData {
+  const funnel = funnelFromStatusCounts(sql.statusCounts)
+  const concerns = sql.concerns.map((item) => ({ ...item, pct: pct(item.cnt, funnel.started) }))
+  const methodTotal = sql.sendMethods.reduce((sum, item) => sum + item.cnt, 0)
+  return {
+    funnel,
+    trend: filterSqlTrend(sql.trend, trendRange),
+    concerns,
+    districts: sql.districts,
+    constituencies: sql.constituencies,
+    sendMethods: sql.sendMethods.map((item) => ({
+      method: item.method,
+      label: sendMethodLabel(item.method),
+      cnt: item.cnt,
+      pct: pct(item.cnt, methodTotal),
+    })),
+    languages: sql.languages.map((item) => ({
+      ...item,
+      pct: pct(item.cnt, funnel.started),
+    })),
+    personalCommentRate: {
+      withComment: sql.withComment,
+      total: funnel.started,
+      pct: pct(sql.withComment, funnel.started),
+    },
+    combinations: sql.combinations.slice(0, 8),
+  }
+}
+
 export async function fetchDashboardData(
   campaignId: string,
   includeTests: boolean,
   trendRange: TrendRange = '7d',
 ): Promise<DashboardData> {
+  const sql = await fetchSqlMetrics(campaignId, includeTests)
+  if (sql) return dashboardFromSql(sql, trendRange)
   const rows = await fetchLightRows(campaignId, includeTests)
   const counts = statusMap(rows)
   const funnel = funnelFromStatusCounts(counts)
@@ -457,6 +587,8 @@ export async function fetchAnalyticsData(
   includeTests: boolean,
   trendRange: TrendRange,
 ): Promise<AnalyticsData> {
+  const sql = await fetchSqlMetrics(campaignId, includeTests)
+  if (sql) return analyticsFromSql(sql, trendRange)
   const rows = await fetchLightRows(campaignId, includeTests)
   const counts = statusMap(rows)
   const funnel = funnelFromStatusCounts(counts)
@@ -514,14 +646,24 @@ export async function fetchAnalyticsData(
   const withComment = rows.filter((r) => Boolean(r.custom_text?.trim())).length
 
   const supabase = createServiceClient()
-  let comboQuery = supabase.from('submission_clauses').select(`
+  const comboRows = await fetchEveryPage(async (from, to) => {
+    let comboQuery = supabase
+      .from('submission_clauses')
+      .select(
+        `
     submission_id,
+    clause_id,
     objection_clauses(title_en, sort_order),
     submissions!inner(campaign_id, is_test)
-  `)
-  comboQuery = comboQuery.eq('submissions.campaign_id', campaignId)
-  if (!includeTests) comboQuery = comboQuery.eq('submissions.is_test', false)
-  const { data: comboRows } = await comboQuery
+  `,
+      )
+      .eq('submissions.campaign_id', campaignId)
+      .order('submission_id', { ascending: true })
+      .order('clause_id', { ascending: true })
+      .range(from, to)
+    if (!includeTests) comboQuery = comboQuery.eq('submissions.is_test', false)
+    return comboQuery
+  })
   const bySubmission = new Map<string, string[]>()
   for (const row of comboRows ?? []) {
     const ocRaw = row.objection_clauses as { title_en: string; sort_order: number } | { title_en: string; sort_order: number }[] | null
@@ -570,20 +712,18 @@ export async function fetchAdminSubmissions(
   const ascending = filters.dir === 'asc'
   const sortColumn = filters.sort === 'stage' ? 'status' : 'created_at'
 
-  let countQuery = supabase.from('submissions').select('id', { count: 'exact', head: true })
+  let countQuery = filters.concernId
+    ? supabase
+        .from('submissions')
+        .select('id, concern_match:submission_clauses!inner(clause_id)', { count: 'exact', head: true })
+        .eq('concern_match.clause_id', filters.concernId)
+    : supabase.from('submissions').select('id', { count: 'exact', head: true })
   countQuery = applyFilters(countQuery, filters, campaignId)
-  if (filters.concernId) {
-    const ids = await submissionIdsForConcern(campaignId, filters.concernId, filters.tests === 'include')
-    countQuery = countQuery.in('id', ids.length > 0 ? ids : ['00000000-0000-0000-0000-000000000000'])
-  }
   const { count, error: countError } = await countQuery
   if (countError) throw countError
 
   // Production is missing custom_text_public; selecting it 500s the whole page.
-  let dataQuery = supabase
-    .from('submissions')
-    .select(
-      `
+  const listColumns = `
       id,
       created_at,
       full_name,
@@ -597,8 +737,26 @@ export async function fetchAdminSubmissions(
       custom_text,
       constituency:constituencies(name_ml, name_en),
       submission_clauses(count)
-    `,
-    )
+    ` as const
+  const filteredColumns = `
+      id,
+      created_at,
+      full_name,
+      email,
+      phone_e164,
+      district,
+      panchayat,
+      status,
+      send_method,
+      is_test,
+      custom_text,
+      constituency:constituencies(name_ml, name_en),
+      submission_clauses(count),
+      concern_match:submission_clauses!inner(clause_id)
+    ` as const
+  let dataQuery = filters.concernId
+    ? supabase.from('submissions').select(filteredColumns).eq('concern_match.clause_id', filters.concernId)
+    : supabase.from('submissions').select(listColumns)
     .order(sortColumn, { ascending })
     .range(from, to)
 
@@ -607,10 +765,7 @@ export async function fetchAdminSubmissions(
   }
 
   dataQuery = applyFilters(dataQuery, filters, campaignId)
-  if (filters.concernId) {
-    const ids = await submissionIdsForConcern(campaignId, filters.concernId, filters.tests === 'include')
-    dataQuery = dataQuery.in('id', ids.length > 0 ? ids : ['00000000-0000-0000-0000-000000000000'])
-  }
+  if (filters.concernId) dataQuery = dataQuery.eq('concern_match.clause_id', filters.concernId)
   const { data, error } = await dataQuery
   if (error) throw error
 
@@ -642,18 +797,6 @@ export async function fetchAdminSubmissions(
   })
 
   return { rows, total: count ?? 0, page, pageSize: ADMIN_PAGE_SIZE }
-}
-
-async function submissionIdsForConcern(campaignId: string, concernId: string, includeTests: boolean): Promise<string[]> {
-  const supabase = createServiceClient()
-  let query = supabase
-    .from('submission_clauses')
-    .select('submission_id, submissions!inner(campaign_id, is_test)')
-    .eq('clause_id', concernId)
-    .eq('submissions.campaign_id', campaignId)
-  if (!includeTests) query = query.eq('submissions.is_test', false)
-  const { data } = await query
-  return [...new Set((data ?? []).map((row) => row.submission_id as string))]
 }
 
 export async function fetchSubmissionDetail(id: string): Promise<SubmissionDetail | null> {
@@ -783,9 +926,24 @@ export async function fetchFilterOptions(campaignId: string): Promise<{
   concerns: { id: string; code: string; title_en: string; title_ml: string }[]
 }> {
   const supabase = createServiceClient()
-  const [{ data: districts }, { data: panchayats }, { data: constituencies }, { data: concerns }] = await Promise.all([
-    supabase.from('submissions').select('district').eq('campaign_id', campaignId).order('district'),
-    supabase.from('submissions').select('panchayat').eq('campaign_id', campaignId).not('panchayat', 'is', null),
+  const [districts, panchayats, { data: constituencies }, { data: concerns }] = await Promise.all([
+    fetchEveryPage((from, to) =>
+      supabase
+        .from('submissions')
+        .select('id, district')
+        .eq('campaign_id', campaignId)
+        .order('id', { ascending: true })
+        .range(from, to),
+    ),
+    fetchEveryPage((from, to) =>
+      supabase
+        .from('submissions')
+        .select('id, panchayat')
+        .eq('campaign_id', campaignId)
+        .not('panchayat', 'is', null)
+        .order('id', { ascending: true })
+        .range(from, to),
+    ),
     supabase.from('constituencies').select('id, name_ml, district').eq('is_active', true).order('district'),
     supabase
       .from('objection_clauses')
@@ -794,9 +952,9 @@ export async function fetchFilterOptions(campaignId: string): Promise<{
       .order('sort_order'),
   ])
 
-  const districtSet = [...new Set((districts ?? []).map((d) => d.district as string).filter(Boolean))].sort()
+  const districtSet = [...new Set(districts.map((d) => d.district as string).filter(Boolean))].sort()
   const panchayatSet = [
-    ...new Set((panchayats ?? []).map((p) => (p.panchayat as string | null)?.trim() ?? '').filter(Boolean)),
+    ...new Set(panchayats.map((p) => (p.panchayat as string | null)?.trim() ?? '').filter(Boolean)),
   ].sort()
   return {
     districts: districtSet,
@@ -818,8 +976,15 @@ export async function fetchDeletionRequests(): Promise<DeletionRequestRow[]> {
   const emails = [...new Set(rows.map((r) => r.email.trim().toLowerCase()).filter(Boolean))]
   const counts = new Map<string, number>()
   if (emails.length > 0) {
-    const { data: matches } = await supabase.from('submissions').select('email_normalized').in('email_normalized', emails)
-    for (const row of matches ?? []) {
+    const matches = await fetchEveryPage((from, to) =>
+      supabase
+        .from('submissions')
+        .select('id, email_normalized')
+        .in('email_normalized', emails)
+        .order('id', { ascending: true })
+        .range(from, to),
+    )
+    for (const row of matches) {
       const email = String(row.email_normalized ?? '')
         .trim()
         .toLowerCase()
@@ -864,14 +1029,19 @@ export async function fetchConcerns(campaignId: string): Promise<
     .order('sort_order', { ascending: true })
   if (error) throw error
 
-  const { data: usage } = await supabase
-    .from('submission_clauses')
-    .select('clause_id, submission_id, submissions!inner(campaign_id, is_test)')
-    .eq('submissions.campaign_id', campaignId)
-    .eq('submissions.is_test', false)
+  const usage = await fetchEveryPage((from, to) =>
+    supabase
+      .from('submission_clauses')
+      .select('clause_id, submission_id, submissions!inner(campaign_id, is_test)')
+      .eq('submissions.campaign_id', campaignId)
+      .eq('submissions.is_test', false)
+      .order('submission_id', { ascending: true })
+      .order('clause_id', { ascending: true })
+      .range(from, to),
+  )
 
   const counts = new Map<string, Set<string>>()
-  for (const row of usage ?? []) {
+  for (const row of usage) {
     const id = row.clause_id as string
     const submissionId = row.submission_id as string
     if (!counts.has(id)) counts.set(id, new Set())
@@ -946,10 +1116,28 @@ export async function* streamSubmissionsCsv(campaignId: string, filters: AdminFi
   let offset = 0
 
   while (true) {
-    let query = supabase
-      .from('submissions')
-      .select(
-        `
+    const exportColumns = filters.concernId
+      ? `
+        id,
+        created_at,
+        full_name,
+        email,
+        phone_e164,
+        address_line,
+        panchayat,
+        district,
+        pincode,
+        status,
+        send_method,
+        confirmed_at,
+        custom_text,
+        campaign_id,
+        is_test,
+        constituency:constituencies(name_ml),
+        submission_clauses(objection_clauses(title_en, code)),
+        concern_match:submission_clauses!inner(clause_id)
+      ` as const
+      : `
         id,
         created_at,
         full_name,
@@ -967,21 +1155,40 @@ export async function* streamSubmissionsCsv(campaignId: string, filters: AdminFi
         is_test,
         constituency:constituencies(name_ml),
         submission_clauses(objection_clauses(title_en, code))
-      `,
-      )
+      ` as const
+    let query = supabase
+      .from('submissions')
+      .select(exportColumns)
       .order('created_at', { ascending: false })
       .range(offset, offset + batchSize - 1)
 
     query = applyFilters(query, filters, campaignId)
-    if (filters.concernId) {
-      const ids = await submissionIdsForConcern(campaignId, filters.concernId, filters.tests === 'include')
-      query = query.in('id', ids.length > 0 ? ids : ['00000000-0000-0000-0000-000000000000'])
-    }
+    if (filters.concernId) query = query.eq('concern_match.clause_id', filters.concernId)
     const { data, error } = await query
     if (error) throw error
-    if (!data || data.length === 0) break
+    const records = (data ?? []) as unknown as {
+      created_at: string
+      full_name: string | null
+      email: string | null
+      phone_e164: string | null
+      address_line: string | null
+      panchayat: string | null
+      district: string
+      pincode: string | null
+      status: SubmissionStatus
+      send_method: string | null
+      confirmed_at: string | null
+      custom_text: string | null
+      campaign_id: string
+      is_test: boolean
+      constituency: { name_ml: string } | { name_ml: string }[] | null
+      submission_clauses: {
+        objection_clauses: { title_en: string; code: string } | { title_en: string; code: string }[] | null
+      }[] | null
+    }[]
+    if (records.length === 0) break
 
-    for (const row of data) {
+    for (const row of records) {
       const constituencyRaw = row.constituency
       const constituency = (Array.isArray(constituencyRaw) ? constituencyRaw[0] : constituencyRaw) as
         | { name_ml: string }
