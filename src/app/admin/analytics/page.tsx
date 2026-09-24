@@ -8,6 +8,7 @@ import { fetchAnalyticsData } from '@/lib/admin/queries'
 import { assertAdminEnv } from '@/lib/env'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 60
 
 export async function generateMetadata() {
   return { title: 'Analytics — Admin', robots: { index: false, follow: false } }
